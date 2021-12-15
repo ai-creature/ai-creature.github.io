@@ -67,7 +67,7 @@
         
             //setup camera
             var camera = new BABYLON.ArcRotateCamera("Camera", BABYLON.Tools.ToRadians(-120), BABYLON.Tools.ToRadians(80), 65, new BABYLON.Vector3(0, -15, 0), scene);    camera.attachControl(canvas, false);
-            
+            camera.attachControl(canvas, true);
             //enable Physics in the scene
             scene.enablePhysics(new BABYLON.Vector3(0,-12,0), new BABYLON.AmmoJSPlugin());
         
@@ -239,7 +239,29 @@
                     marble.dispose();
                 });
             };
+
+            BABYLON.ParticleHelper.SnippetUrl = "3d/snippet";
         
+            var coreSys;
+            setInterval(() => {
+                var vec = new BABYLON.Vector3(Math.random()*10,Math.random()*10,Math.random()*10)
+                sphereSpark.position = vec
+                coreSys.worldOffset = vec
+                coreSys.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
+            }, 1000)
+
+            // 2nd Particle Sytem - Core
+            BABYLON.ParticleHelper.CreateFromSnippetAsync("EXUQ7M-5.json", scene, false).then(system => {
+                coreSys = system
+            });
+            
+            // 3rd Particle Sytem - Sparks
+            var sphereSpark = BABYLON.MeshBuilder.CreateSphere("sphereSpark", {diameter: 0.4, segments: 32}, scene);
+            sphereSpark.isVisible = false;
+            BABYLON.ParticleHelper.CreateFromSnippetAsync("UY098C-3.json", scene, false).then(system => {
+                system.emitter = sphereSpark;
+            });
+
             return scene;
         };
         
@@ -259,6 +281,7 @@
                     window.engine = await asyncEngineCreation();
         if (!engine) throw 'engine should not be null.';
         window.scene = createScene();};
+
         initFunction().then(() => {sceneToRender = scene        
             engine.runRenderLoop(function () {
                 if (sceneToRender && sceneToRender.activeCamera) {
