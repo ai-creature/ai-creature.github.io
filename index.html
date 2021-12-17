@@ -77,7 +77,7 @@
             camera.lowerRadiusLimit = 10;
             camera.upperRadiusLimit = 120;
 
-            //enable Physics in the scene
+            //enable Physics in the scene vector = gravity
             scene.enablePhysics(new BABYLON.Vector3(0, 0, 0), new BABYLON.AmmoJSPlugin());
         
             //LIGHTS
@@ -92,69 +92,115 @@
 
 
             await BABYLON.SceneLoader.AppendAsync("3d/marbleTower.glb");
+
+            const tower = scene.getMeshByName("tower");
+            tower.setParent(null);
+            tower.impostor = new BABYLON.PhysicsImpostor(tower, BABYLON.PhysicsImpostor.MeshImpostor, {
+                mass: 0,
+                friction: 1
+            });
+            
+            /* CREATURE */
+            const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 1, segments: 32}, scene);
+            creature.setParent(null);
+
+            const crMat = new BABYLON.StandardMaterial("cr_mat", scene);
+            crMat.alpha = 0; // for screenshots
+            creature.material = crMat
+
+            creature.impostor = new BABYLON.PhysicsImpostor(creature, BABYLON.PhysicsImpostor.SphereImpostor, {
+                mass: 0.1,
+                friction: 0
+            }, scene);
             
             BABYLON.ParticleHelper.SnippetUrl = "3d/snippet";
-            
-            // CREATURE
-            const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 1, segments: 32}, scene);
-            creature.isVisible = false;
-            creature.setParent(null);
-            
+
             // Sparks
             creature.sparks = await BABYLON.ParticleHelper.CreateFromSnippetAsync("UY098C-3.json", scene, false);
             creature.sparks.emitter = creature;
             
             // Core
             creature.glow = await BABYLON.ParticleHelper.CreateFromSnippetAsync("EXUQ7M-5.json", scene, false);
-            // creature.glow2 = await BABYLON.ParticleHelper.CreateFromSnippetAsync("EXUQ7M-fast.json", scene, false);
             creature.glow.emitter = creature;
+
+
+            /* CLIENT */
+            const client = BABYLON.MeshBuilder.CreateSphere("client", {diameter: 3, segments: 32}, scene);
+            client.setParent(camera);
+            client.position = new BABYLON.Vector3(0, -12,0)
+
+            const clMat = new BABYLON.StandardMaterial("cl_mat", scene)
+            clMat.diffuseColor = new BABYLON.Color3(0, 0, 0)
+            client.material = clMat
+            
 
             engine.hideLoadingUI();
 
-
-            // PHYSICS
+            
+            /* ANIMATION */
             const rand = (min, max) => Math.random() * (max - min) + min;
+            (() => {
+                let start = Date.now()
+                scene.registerBeforeRender(() => {
+                    const elapsed = Date.now() - start
+                    if (elapsed < 1000) return
+                    start = Date.now()
 
-            creature.impostor = new BABYLON.PhysicsImpostor(creature, BABYLON.PhysicsImpostor.SphereImpostor, {
-                mass: 0.1
-            }, scene);
+                    const range = [-1, 1]
+                    var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
+                    creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
+                    
+                    const rotRange = [-2 * Math.PI, 2 * Math.PI]
+                    creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
 
-            var tower = scene.getMeshByName("tower");
-            tower.setParent(null);
-            tower.impostor = new BABYLON.PhysicsImpostor(tower, BABYLON.PhysicsImpostor.MeshImpostor, {
-                mass: 0,
-                friction: 1
-            });
+                    creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
+                })
+            })()
 
-            // ANIMATION
-            setInterval(() => {
-                const range = [-1, 1]
-                var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
 
-                creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
-                
-                //  creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
-                const rotRange = [-2 * Math.PI, 2 * Math.PI]
-                creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
-            }, 1000)
-
-            scene.registerBeforeRender(() => {
-                // creature.glow.worldOffset = creature.position
-            });
-
+            /* CAGE */
             const cage = BABYLON.MeshBuilder.CreateBox("cage", {
                 width: 35, 
                 depth: 35, 
                 height: 40
-            }, scene);
-            cage.position = new BABYLON.Vector3(0, -12,0);
-            cage.isVisible = false;
-            cage.setParent(null);
+            }, scene)
+            cage.position = new BABYLON.Vector3(0, -12,0)
+            cage.isVisible = false
+            cage.setParent(null)
 
             cage.impostor = new BABYLON.PhysicsImpostor(cage, BABYLON.PhysicsImpostor.MeshImpostor, {
                 mass: 0,
                 friction: 1
             });
+
+
+            /* CREATURE's CAMERA */
+            const proj = BABYLON.MeshBuilder.CreateBox("proj", {
+                width: 20, 
+                depth: 0.1, 
+                height: 10
+            }, scene)
+            proj.position = new BABYLON.Vector3(20, 0, 0)
+            // proj.addRotation(0, Math.PI/2, 0)
+
+            const projMat = new BABYLON.StandardMaterial("proj_mat", scene)
+            proj.material = projMat
+
+            var crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(1, 0, 0), scene)
+            crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
+            crCamera.parent = creature;
+
+            let start = Date.now()
+            scene.registerBeforeRender(() => {
+                const elapsed = Date.now() - start
+                if (elapsed < 50) return
+                start = Date.now()
+                BABYLON.Tools.CreateScreenshotUsingRenderTarget(engine, crCamera, {
+                    width:200, height:100
+                }, data => {
+                    proj.material.diffuseTexture = new BABYLON.Texture(data, scene)
+                })
+            })
 
             return scene;
         };
@@ -187,7 +233,6 @@
             });
         });
 
-        // Resize
         window.addEventListener("resize", function () {
             engine.resize();
         });
