@@ -131,11 +131,12 @@
                 const range = [-1, 1]
                 var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
 
-                 creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
+                creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
                 
-                 creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
-
-            }, 2000)
+                //  creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
+                const rotRange = [-2 * Math.PI, 2 * Math.PI]
+                creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
+            }, 1000)
 
             scene.registerBeforeRender(() => {
                 // creature.glow.worldOffset = creature.position
@@ -154,12 +155,6 @@
                 mass: 0,
                 friction: 1
             });
-
-            // creature.impostor.registerOnPhysicsCollide(tower, function(main, collided) {
-                //main.object.material.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-            // });
-
-
 
             return scene;
         };
