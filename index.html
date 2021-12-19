@@ -20,6 +20,9 @@
         <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
         <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
 
+        <!-- tf.js -->
+        <!--script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script-->
+
         <style>
             html, body {
                 overflow: hidden;
@@ -39,6 +42,7 @@
 <body>
     <canvas id="renderCanvas"></canvas>
     <script>
+        
         var canvas = document.getElementById("renderCanvas");
 
         var engine = null;
@@ -53,6 +57,7 @@
         };
 
         var createScene = async function () {
+            
             // This creates a basic Babylon Scene object (non-mesh)
             var scene = new BABYLON.Scene(engine);
         
@@ -236,6 +241,21 @@
         window.addEventListener("resize", function () {
             engine.resize();
         });
+
+    </script>
+
+
+    <script>
+        const worker = new Worker("worker.js")
+
+       // to listen for incoming messages from the worker.
+        worker.addEventListener('message', e => {
+            console.log(`Message from worker ${e.data}`)
+        })
+        // to send message to the worker
+        setTimeout(() => {
+            worker.postMessage("Hello from main")
+        }, 3000)
 
     </script>
 </body>
