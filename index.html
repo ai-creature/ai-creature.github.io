@@ -21,7 +21,7 @@
         <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
 
         <!-- tf.js -->
-        <!--script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script-->
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
 
         <style>
             html, body {
@@ -37,10 +37,18 @@
                 height: 100%;
                 touch-action: none;
             }
+            #testCanvas {
+                position:absolute;
+                width: 200;
+                height: 100;
+                right:0;
+                bottom:0;
+            }
         </style>
     </head>
 <body>
     <canvas id="renderCanvas"></canvas>
+    <canvas id="testCanvas"></canvas>
     <script>
         
         var canvas = document.getElementById("renderCanvas");
@@ -178,7 +186,6 @@
                 friction: 1
             });
 
-
             /* CREATURE's CAMERA */
             const proj = BABYLON.MeshBuilder.CreateBox("proj", {
                 width: 20, 
@@ -187,6 +194,7 @@
             }, scene)
             proj.position = new BABYLON.Vector3(20, 0, 0)
             // proj.addRotation(0, Math.PI/2, 0)
+            proj.isVisible = false
 
             const projMat = new BABYLON.StandardMaterial("proj_mat", scene)
             proj.material = projMat
@@ -195,16 +203,67 @@
             crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
             crCamera.parent = creature;
 
+
+            const worker = new Worker("worker.js")
+            worker.addEventListener('message', e => {
+                console.log("Worker: ", e.data)
+            })
+
             let start = Date.now()
-            scene.registerBeforeRender(() => {
+            let fl = true
+            scene.registerBeforeRender(async () => {
                 const elapsed = Date.now() - start
-                if (elapsed < 50) return
+                if (elapsed < 1000) return
                 start = Date.now()
-                BABYLON.Tools.CreateScreenshotUsingRenderTarget(engine, crCamera, {
-                    width:200, height:100
-                }, data => {
-                    proj.material.diffuseTexture = new BABYLON.Texture(data, scene)
+// if (!fl) return
+// fl = false
+                const data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, {
+                    width: 200, height: 100
                 })
+
+                const DecodeBase64ToBinary = (base64Data) => {
+                    const decodedString = atob(base64Data);
+                    const bufferLength = decodedString.length;
+                    // console.log("bufferLength = ", bufferLength)
+                    const bufferView = new Uint8Array(new ArrayBuffer(bufferLength));
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        bufferView[i] = decodedString.charCodeAt(i);
+                    }
+
+                    return bufferView;
+                };
+                
+
+
+
+                function base64ToImg(base64) {
+                    return new Promise((resolve, _) => {
+                        const img = new Image()
+                        img.src = base64
+                        img.onload = () => resolve(img)
+                    });
+                }
+
+                const lbl = Date.now()
+                console.time(lbl)
+                const img = await base64ToImg(data)
+                console.timeEnd(lbl)
+                
+                const tensor = tf.browser.fromPixels(img)
+
+                worker.postMessage(tensor)
+
+                // var arrayBufferView = DecodeBase64ToBinary(data.split(",")[1]);
+                // var blob = new Blob( [ arrayBufferView ], { type: "image/png" } );
+                // var urlCreator = window.URL || window.webkitURL;
+                // var imageUrl = urlCreator.createObjectURL( blob );
+
+                tf.browser.toPixels(tensor, document.getElementById("testCanvas"))
+
+                // proj.material.diffuseTexture = new BABYLON.Texture(data, scene)
+
+        
             })
 
             return scene;
@@ -246,16 +305,7 @@
 
 
     <script>
-        const worker = new Worker("worker.js")
 
-       // to listen for incoming messages from the worker.
-        worker.addEventListener('message', e => {
-            console.log(`Message from worker ${e.data}`)
-        })
-        // to send message to the worker
-        setTimeout(() => {
-            worker.postMessage("Hello from main")
-        }, 3000)
 
     </script>
 </body>

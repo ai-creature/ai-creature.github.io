@@ -12,14 +12,23 @@
     const ys = tf.tensor2d([1, 3, 5, 7, 8], [5, 1]);
 
     // Train the model using the data.
-    await model.fit(xs, ys, {epochs: 100});
+    // await model.fit(xs, ys, {epochs: 100});
 
     // Use the model to do inference on a data point the model hasn't seen before:
-    model.predict(tf.tensor2d([6], [1, 1])).print();
+    // model.predict(tf.tensor2d([6], [1, 1])).print();
 
-    self.addEventListener('message', e => {
-        console.log(`Message from main thread ${e.data}`)
+    self.addEventListener('message', async e => {
+
+        // const ta = new Int32Array(e.data)
+        // console.log(new Uint8Array(e.data))
+        // const frame = tf.tensor3d(e.data, [200,200,3])
+
+        // var blob = new Blob( [ e.data ], { type: "image/png" } );
+
+        // const frame = tf.browser.fromPixels(blob)
+
+        // console.log(`Worker: `, e.data.shape())
         // send a message back to the main thread
-        self.postMessage("Hello from worker " + e.data.length)
+        self.postMessage(e.data.shape)
     })
 })()
