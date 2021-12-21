@@ -186,53 +186,65 @@
                 friction: 1
             });
 
+
+
+
             /* CREATURE's CAMERA */
             const proj = BABYLON.MeshBuilder.CreateBox("proj", {
                 width: 20, 
                 depth: 0.1, 
                 height: 10
             }, scene)
+            proj.material = new BABYLON.StandardMaterial("proj_mat", scene)
             proj.position = new BABYLON.Vector3(20, 0, 0)
             // proj.addRotation(0, Math.PI/2, 0)
-            proj.isVisible = false
-
-            const projMat = new BABYLON.StandardMaterial("proj_mat", scene)
-            proj.material = projMat
+            proj.isVisible = true
 
             var crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(1, 0, 0), scene)
             crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
             crCamera.parent = creature;
 
 
+
             const worker = new Worker("worker.js")
             worker.addEventListener('message', e => {
-                console.log("Worker: ", e.data)
+                console.log("Worker console: ", e.data.console)
+
+                tf.browser.toPixels(e.data.data, document.getElementById("testCanvas"))
             })
 
-            let start = Date.now()
+
+            let frameEvery = 50
+            let start = Date.now() + frameEvery
             let fl = true
             scene.registerBeforeRender(async () => {
-                const elapsed = Date.now() - start
-                if (elapsed < 1000) return
-                start = Date.now()
+                if (Date.now() < start) return
+                start = Date.now() + frameEvery
 // if (!fl) return
 // fl = false
-                const data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, {
-                    width: 200, height: 100
+                const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, {
+                    width: 150, 
+                    height: 75
                 })
 
-                const DecodeBase64ToBinary = (base64Data) => {
-                    const decodedString = atob(base64Data);
-                    const bufferLength = decodedString.length;
-                    // console.log("bufferLength = ", bufferLength)
-                    const bufferView = new Uint8Array(new ArrayBuffer(bufferLength));
+                proj.material.diffuseTexture = new BABYLON.Texture(base64Data, scene)
 
-                    for (let i = 0; i < bufferLength; i++) {
-                        bufferView[i] = decodedString.charCodeAt(i);
-                    }
 
-                    return bufferView;
-                };
+
+
+
+                // const DecodeBase64ToBinary = (base64Data) => {
+                //     const decodedString = atob(base64Data);
+                //     const bufferLength = decodedString.length;
+                //     // console.log("bufferLength = ", bufferLength)
+                //     const bufferView = new Uint8Array(new ArrayBuffer(bufferLength));
+
+                //     for (let i = 0; i < bufferLength; i++) {
+                //         bufferView[i] = decodedString.charCodeAt(i);
+                //     }
+
+                //     return bufferView;
+                // };
                 
 
 
@@ -245,25 +257,33 @@
                     });
                 }
 
-                const lbl = Date.now()
-                console.time(lbl)
-                const img = await base64ToImg(data)
-                console.timeEnd(lbl)
-                
+                console.time(start)
+
+                const img = await base64ToImg(base64Data)
+
+                // console.log(atob(base64Data.split(",")[1]))
+
                 const tensor = tf.browser.fromPixels(img)
+                // const tensor = tf.tensor(atob(base64Data.split(",")[1]), [100,200,3])
+                
+                // var canv = document.createElement('canvas');
+                // canv.id = 'someId';
+                // var ctx = canvas.getContext("2d")
+                // var fr = await base64ToImg(base64Data)
+                // ctx.drawImage(fr, 0, 0);
+                
+                // console.log("array ", JSON.stringify(await tensor.array()).length)
 
-                worker.postMessage(tensor)
+                worker.postMessage(await tensor.array())
+                // worker.postMessage(base64Data.split(",")[1])
 
-                // var arrayBufferView = DecodeBase64ToBinary(data.split(",")[1]);
-                // var blob = new Blob( [ arrayBufferView ], { type: "image/png" } );
-                // var urlCreator = window.URL || window.webkitURL;
-                // var imageUrl = urlCreator.createObjectURL( blob );
+                // tensor.dispose()
+                
+                // console.time("qq"+start)
+                // console.timeEnd("qq"+start)
+                // tf.browser.toPixels(tensor, document.getElementById("testCanvas"))
 
-                tf.browser.toPixels(tensor, document.getElementById("testCanvas"))
-
-                // proj.material.diffuseTexture = new BABYLON.Texture(data, scene)
-
-        
+                console.timeEnd(start)
             })
 
             return scene;
