@@ -1,58 +1,117 @@
-(async () => {
-    importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js");
-    importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js");
-    
-                    
-    // Define a model for linear regression.
-    const model = tf.sequential();
-    model.add(tf.layers.dense({units: 1, inputShape: [1]}));
+/*
+const model = tf.sequential();
+model.add(tf.layers.dense({units: 1, inputShape: [1]}));
+model.compile({loss: 'meanSquaredError', optimizer: 'sgd'});
 
-    model.compile({loss: 'meanSquaredError', optimizer: 'sgd'});
+const xs = tf.tensor2d([1, 2, 3, 4, 5], [5, 1]);
+const ys = tf.tensor2d([1, 3, 5, 7, 8], [5, 1]);
 
-    // Generate some synthetic data for training.
-    const xs = tf.tensor2d([1, 2, 3, 4, 5], [5, 1]);
-    const ys = tf.tensor2d([1, 3, 5, 7, 8], [5, 1]);
+await model.fit(xs, ys, {epochs: 100});
+model.predict(tf.tensor2d([6], [1, 1])).print(); 
+*/
+importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
 
-    // Train the model using the data.
-    // await model.fit(xs, ys, {epochs: 100});
+const model = tf.sequential();
+const kernelSize = [3, 3]
+const poolSize = 2
+const strides = 1
+let layer = 0
 
-    // Use the model to do inference on a data point the model hasn't seen before:
-    // model.predict(tf.tensor2d([6], [1, 1])).print();
+model.add(tf.layers.inputLayer({inputShape: [128, 256, 3]}))
 
-    self.addEventListener('message', async (e) => {
+layer++
+model.add(tf.layers.conv2d({
+    filters: 2**(4 + layer),
+    kernelSize, 
+    activation: 'relu',
+    padding: 'same',
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize
+}))
 
-        // const ta = new Int32Array(e.data)
-        // console.log(new Uint8Array(e.data))
-        // const frame = tf.tensor3d(e.data, [200,200,3])
+layer++
+model.add(tf.layers.conv2d({
+    filters: 2**(4 + layer),
+    kernelSize,  
+    activation: 'relu',
+    padding: 'same',
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize
+}))
 
-        // var blob = new Blob( [ e.data ], { type: "image/png" } );
+layer++
+model.add(tf.layers.conv2d({
+    filters: 2**(4 + layer),
+    kernelSize,
+    activation: 'relu',
+    padding: 'same',
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize
+}))
 
-        // const frame = tf.browser.fromPixels(blob)
+layer++
+model.add(tf.layers.conv2d({
+    filters: 2**(4 + layer),
+    kernelSize,
+    activation: 'relu',
+    padding: 'same',
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize
+}))
 
-        // console.log(`Worker: `, e.data.shape)
+layer++
+model.add(tf.layers.conv2d({
+    filters: 2**(4 + layer),
+    kernelSize,
+    activation: 'relu',
+    padding: 'same',
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize
+}))
 
-        const frame = tf.tensor3d(e.data, [75, 150, 3])
+console.log(model.summary())
 
-        // const base64Data = e.data
-        // const DecodeBase64ToBinary = (base64Data) => {
-        //     const decodedString = atob(base64Data);
-        //     const bufferLength = decodedString.length;
-        //     const bufferView = new Uint8Array(new ArrayBuffer(bufferLength));
+model.compile({optimizer: 'sgd', loss: 'meanSquaredError'})
 
-        //     for (let i = 0; i < bufferLength; i++) {
-        //         bufferView[i] = decodedString.charCodeAt(i);
-        //     }
+let busy = false
+self.addEventListener('message', async e => {
+    const frame = tf.tensor3d(e.data, [128, 256, 3])
 
-        //     return bufferView;
-        // };
+    let st = Date.now()
+    console.time("predict: " + st)
+    const res = model.predict(frame.expandDims(0))
+    // res.print()
+    // console.log(res.shape)
+    console.timeEnd("predict: " + st)
 
-        // const frame = tf.tensor3d(dsd, [100, 200, 3])
-        
-        // const frame = tf.node.decodeJpeg(DecodeBase64ToBinary(base64Data))
-        const data = await frame.array()
-        self.postMessage({
-            data,
-            console: "" 
-        })
-    })
-})()
+
+    if (!busy) {
+        busy = true
+
+        st = Date.now()
+        console.time("fit: " + st)
+        const h = await model.fit(frame.expandDims(0), tf.ones(res.shape), {
+            batchSize: 1,
+            epochs: 1
+        });
+        console.log("Loss: " + h.history.loss[0])
+        console.timeEnd("fit: " + st)
+
+        busy = false
+    }
+
+
+    const data = await frame.array()
+    self.postMessage(data)
+})
+

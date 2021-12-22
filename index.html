@@ -21,8 +21,8 @@
         <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
 
         <!-- tf.js -->
-        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
-
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js"></script>
+        
         <style>
             html, body {
                 overflow: hidden;
@@ -151,15 +151,15 @@
 
             
             /* ANIMATION */
-            const rand = (min, max) => Math.random() * (max - min) + min;
-            (() => {
+            const rand = (min, max) => Math.random() * (max - min) + min
+            ;(() => {
                 let start = Date.now()
                 scene.registerBeforeRender(() => {
                     const elapsed = Date.now() - start
                     if (elapsed < 1000) return
                     start = Date.now()
 
-                    const range = [-1, 1]
+                    const range = [-0.5, 0.5]
                     var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
                     creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
                     
@@ -187,8 +187,6 @@
             });
 
 
-
-
             /* CREATURE's CAMERA */
             const proj = BABYLON.MeshBuilder.CreateBox("proj", {
                 width: 20, 
@@ -205,49 +203,27 @@
             crCamera.parent = creature;
 
 
-
             const worker = new Worker("worker.js")
             worker.addEventListener('message', e => {
-                console.log("Worker console: ", e.data.console)
-
-                tf.browser.toPixels(e.data.data, document.getElementById("testCanvas"))
+                tf.browser.toPixels(e.data, document.getElementById("testCanvas"))
             })
 
 
             let frameEvery = 50
             let start = Date.now() + frameEvery
             let fl = true
+
             scene.registerBeforeRender(async () => {
                 if (Date.now() < start) return
                 start = Date.now() + frameEvery
 // if (!fl) return
 // fl = false
                 const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, {
-                    width: 150, 
-                    height: 75
+                    width: 256, 
+                    height: 128
                 })
 
                 proj.material.diffuseTexture = new BABYLON.Texture(base64Data, scene)
-
-
-
-
-
-                // const DecodeBase64ToBinary = (base64Data) => {
-                //     const decodedString = atob(base64Data);
-                //     const bufferLength = decodedString.length;
-                //     // console.log("bufferLength = ", bufferLength)
-                //     const bufferView = new Uint8Array(new ArrayBuffer(bufferLength));
-
-                //     for (let i = 0; i < bufferLength; i++) {
-                //         bufferView[i] = decodedString.charCodeAt(i);
-                //     }
-
-                //     return bufferView;
-                // };
-                
-
-
 
                 function base64ToImg(base64) {
                     return new Promise((resolve, _) => {
@@ -257,38 +233,14 @@
                     });
                 }
 
-                console.time(start)
-
                 const img = await base64ToImg(base64Data)
-
-                // console.log(atob(base64Data.split(",")[1]))
-
                 const tensor = tf.browser.fromPixels(img)
-                // const tensor = tf.tensor(atob(base64Data.split(",")[1]), [100,200,3])
-                
-                // var canv = document.createElement('canvas');
-                // canv.id = 'someId';
-                // var ctx = canvas.getContext("2d")
-                // var fr = await base64ToImg(base64Data)
-                // ctx.drawImage(fr, 0, 0);
-                
-                // console.log("array ", JSON.stringify(await tensor.array()).length)
-
                 worker.postMessage(await tensor.array())
-                // worker.postMessage(base64Data.split(",")[1])
-
-                // tensor.dispose()
-                
-                // console.time("qq"+start)
-                // console.timeEnd("qq"+start)
-                // tf.browser.toPixels(tensor, document.getElementById("testCanvas"))
-
-                console.timeEnd(start)
+                tensor.dispose()
             })
 
             return scene;
         };
-        
         window.initFunction = async function() {
             await Ammo();
             
@@ -320,12 +272,6 @@
         window.addEventListener("resize", function () {
             engine.resize();
         });
-
-    </script>
-
-
-    <script>
-
 
     </script>
 </body>
