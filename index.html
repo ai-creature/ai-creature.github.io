@@ -163,8 +163,8 @@
                     var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
                     creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
                     
-                    const rotRange = [-2 * Math.PI, 2 * Math.PI]
-                    creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
+                    // const rotRange = [-Math.PI/209, Math.PI/209]
+                    // creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
 
                     creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
                 })

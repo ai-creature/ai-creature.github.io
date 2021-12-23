@@ -9,93 +9,126 @@ const ys = tf.tensor2d([1, 3, 5, 7, 8], [5, 1]);
 await model.fit(xs, ys, {epochs: 100});
 model.predict(tf.tensor2d([6], [1, 1])).print(); 
 */
+
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
 
 const model = tf.sequential();
+const inputShape = [128, 256, 3]
 const kernelSize = [3, 3]
 const poolSize = 2
 const strides = 1
-let layer = 0
+const padding = 'same'
+let filterPow = 4
 
-model.add(tf.layers.inputLayer({inputShape: [128, 256, 3]}))
+model.add(tf.layers.inputLayer({inputShape}))
 
-layer++
+filterPow++
 model.add(tf.layers.conv2d({
-    filters: 2**(4 + layer),
-    kernelSize, 
+    filters: 2**filterPow,
+    kernelSize,
     activation: 'relu',
-    padding: 'same',
+    padding,
     strides
 }))
 model.add(tf.layers.maxPooling2d({
     poolSize
 }))
 
-layer++
+// filterPow++
 model.add(tf.layers.conv2d({
-    filters: 2**(4 + layer),
+    filters: 2**filterPow,
     kernelSize,  
     activation: 'relu',
-    padding: 'same',
+    padding,
     strides
 }))
 model.add(tf.layers.maxPooling2d({
     poolSize
 }))
 
-layer++
+filterPow++
 model.add(tf.layers.conv2d({
-    filters: 2**(4 + layer),
+    filters: 2**filterPow,
     kernelSize,
     activation: 'relu',
-    padding: 'same',
+    padding,
     strides
 }))
 model.add(tf.layers.maxPooling2d({
     poolSize
 }))
 
-layer++
+// filterPow++
 model.add(tf.layers.conv2d({
-    filters: 2**(4 + layer),
+    filters: 2**filterPow,
     kernelSize,
     activation: 'relu',
-    padding: 'same',
+    padding,
     strides
 }))
 model.add(tf.layers.maxPooling2d({
     poolSize
 }))
 
-layer++
+filterPow++
 model.add(tf.layers.conv2d({
-    filters: 2**(4 + layer),
+    filters: 2**filterPow,
     kernelSize,
     activation: 'relu',
-    padding: 'same',
+    padding,
     strides
 }))
 model.add(tf.layers.maxPooling2d({
-    poolSize
+    poolSize,
 }))
 
-console.log(model.summary())
+
+// filterPow++
+model.add(tf.layers.conv2d({
+    filters: 2**filterPow,
+    kernelSize,
+    activation: 'relu',
+    padding,
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize,
+}))
+
+
+filterPow++
+model.add(tf.layers.conv2d({
+    filters: 2**filterPow,
+    kernelSize: [1, 1],
+    activation: 'relu',
+    padding,
+    strides
+}))
+model.add(tf.layers.maxPooling2d({
+    poolSize,
+}))
+
+
 
 model.compile({optimizer: 'sgd', loss: 'meanSquaredError'})
+console.log(model.summary())
 
 let busy = false
 self.addEventListener('message', async e => {
-    const frame = tf.tensor3d(e.data, [128, 256, 3])
-
-    let st = Date.now()
-    console.time("predict: " + st)
-    const res = model.predict(frame.expandDims(0))
-    // res.print()
-    // console.log(res.shape)
-    console.timeEnd("predict: " + st)
+    const frame = tf.tensor3d(e.data, inputShape)
 
 
-    if (!busy) {
+
+
+    if (false && !busy) {
+        let st = Date.now()
+        console.time("predict: " + st)
+        const res = model.predict(frame.expandDims(0))
+        // res.print()
+        // console.log(res)
+        console.timeEnd("predict: " + st)
+
+
         busy = true
 
         st = Date.now()
@@ -112,6 +145,9 @@ self.addEventListener('message', async e => {
 
 
     const data = await frame.array()
+
+    frame.dispose()
+
     self.postMessage(data)
 })
 
