@@ -18,97 +18,31 @@ const kernelSize = [3, 3]
 const poolSize = 2
 const strides = 1
 const padding = 'same'
-let filterPow = 4
+let filterPow = 3
 
 model.add(tf.layers.inputLayer({inputShape}))
 
-filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize
-}))
+layers = 14
+for (let i = 0; i < layers; i++) {
+    if (i%3 == 1) {
+        filterPow++
+        
+    }
 
-// filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,  
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize
-}))
+    model.add(tf.layers.conv2d({
+        filters: 2**filterPow,
+        kernelSize,
+        activation: 'relu',
+        padding,
+        strides
+    }))
 
-filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize
-}))
-
-// filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize
-}))
-
-filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize,
-}))
-
-
-// filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize,
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize,
-}))
-
-
-filterPow++
-model.add(tf.layers.conv2d({
-    filters: 2**filterPow,
-    kernelSize: [1, 1],
-    activation: 'relu',
-    padding,
-    strides
-}))
-model.add(tf.layers.maxPooling2d({
-    poolSize,
-}))
-
-
+    if (i%2 == 1) {
+        model.add(tf.layers.maxPooling2d({
+            poolSize
+        }))
+    }
+}
 
 model.compile({optimizer: 'sgd', loss: 'meanSquaredError'})
 console.log(model.summary())
@@ -117,10 +51,7 @@ let busy = false
 self.addEventListener('message', async e => {
     const frame = tf.tensor3d(e.data, inputShape)
 
-
-
-
-    if (false && !busy) {
+    if (true && !busy) {
         let st = Date.now()
         console.time("predict: " + st)
         const res = model.predict(frame.expandDims(0))
