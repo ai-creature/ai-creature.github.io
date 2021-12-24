@@ -34,7 +34,8 @@ for (let i = 0; i < layers; i++) {
         kernelSize,
         activation: 'relu',
         padding,
-        strides
+        strides,
+        kernelInitializer: 'heNormal'
     }))
 
     if (i%2 == 1) {
@@ -44,40 +45,52 @@ for (let i = 0; i < layers; i++) {
     }
 }
 
-model.compile({optimizer: 'sgd', loss: 'meanSquaredError'})
+model.compile({optimizer: 'adam', loss: 'meanSquaredError'})
 console.log(model.summary())
 
 let busy = false
 self.addEventListener('message', async e => {
-    const frame = tf.tensor3d(e.data, inputShape)
+    const meanRgb = [0.485, 0.456, 0.406]
+    const stdRgb = [0.229, 0.224, 0.225]
+
+    const frame = tf.tensor3d(e.data, inputShape, 'float32')
+    const frameNorm = frame
+        .div(tf.scalar(255))
+        .sub(meanRgb)
+        .div(stdRgb)
+
+    // console.log((await frameNorm.array())[0][0])
 
     if (true && !busy) {
-        let st = Date.now()
-        console.time("predict: " + st)
-        const res = model.predict(frame.expandDims(0))
-        // res.print()
-        // console.log(res)
-        console.timeEnd("predict: " + st)
-
-
         busy = true
 
-        st = Date.now()
-        console.time("fit: " + st)
-        const h = await model.fit(frame.expandDims(0), tf.ones(res.shape), {
+        let st = Date.now()
+        // console.time("predict: " + st)
+        const res = model.predict(frameNorm.expandDims(0))
+        // res.print()
+        console.log("Pred: " + (await res.array())[0][0][0][0])
+        // console.timeEnd("predict: " + st)
+
+
+
+        // st = Date.now()
+        // console.time("fit: " + st)
+        const h = await model.fit(frameNorm.expandDims(0), tf.ones(res.shape), {
             batchSize: 1,
             epochs: 1
         });
         console.log("Loss: " + h.history.loss[0])
-        console.timeEnd("fit: " + st)
+        // console.timeEnd("fit: " + st)
 
         busy = false
     }
 
 
     const data = await frame.array()
-
+    // console.log(data[0][0])
+    
     frame.dispose()
+    frameNorm.dispose()
 
     self.postMessage(data)
 })
