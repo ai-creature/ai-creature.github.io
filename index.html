@@ -203,7 +203,7 @@
             crCamera.parent = creature;
 
 
-            const worker = new Worker("worker.js")
+            const worker = new Worker("worker_test.js")
             worker.addEventListener('message', e => {
                 tf.browser.toPixels(e.data, document.getElementById("testCanvas"))
             })

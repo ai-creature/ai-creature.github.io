@@ -35,48 +35,59 @@ for (let i = 0; i < layers; i++) {
     }
 }
 
-// outputs = tf.layers.reshape({targetShape: [1, ...outputs.shape.slice(1)]}).apply(outputs)
+// outputs = tf.layers.reshape({targetShape: [2, 256]}).apply(outputs)
 // outputs = tf.layers.convLstm2d({filters: 64, kernelSize}).apply(outputs)
 // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
 
 
-// let rnnState = []
 // outputs = tf.layers.flatten().apply(outputs)
+// outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
+
+// let rnnState = []
 // ;[outputs, rnnState] = tf.layers.rnn({
+// outputs = tf.layers.rnn({
 //     cell:[
 //         tf.layers.gruCell({
-//             units: 32,
-//             kernelInitializer: 'heNormal',
-//             recurrentInitializer: 'heNormal',
+//             units: 64,
+//             // kernelInitializer: 'heNormal',
+//             // recurrentInitializer: 'heNormal',
 //             // biasInitializer: 'heNormal',
 //             // useBias: true,
-//             // trainable: true
+//             trainable: true,
 
-//             // dropout: 0.1,
-//             // recurrentDropout: 0.1,
-//             // activation: 'relu'
-//         }),
+//             dropout: 0.1,
+//             recurrentDropout: 0.1,
+//         })
 //     ],
+    
 //     stateful: true,
-//     returnSequences: false,
-//     returnState: true
+//     returnSequences: true,
+//     returnState: false
 // }).apply(outputs)
 
+// outputs = tf.layers.dense({units: 32}).apply(outputs)
 
-outputs = tf.layers.flatten().apply(outputs)
-outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
+
 // outputs = tf.layers.reshape({targetShape: [1, 512]}).apply(outputs)
 // outputs = tf.layers.permute({dims: [2,1]}).apply(outputs)
-outputs = tf.layers.gru({units: 32, stateful: true}).apply(outputs)
+// outputs = tf.layers.gru({
+//     units: 32, 
+//     stateful: true,
+//     returnSequences: true
+// }).apply(outputs)
 
-// outputs = new MyGruLayer({units: 32}).apply(outputs)
+outputs = tf.layers.flatten().apply(outputs)
+outputs = new MyGruLayer({units: 64}).apply(outputs)
 
-// outputs = tf.layers.dense({units: 64}).apply(outputs)
 
 
 
 const model = tf.model({inputs, outputs})
-model.compile({optimizer: 'adam', loss: 'meanSquaredError'})
+model.compile({
+    optimizer: tf.train.adam(), 
+    loss: 'meanSquaredError',
+    //  metrics: ['accuracy']
+})
 console.log(model.summary())
 // model.weights.forEach(w => {console.log(w.name, w.shape);});
 
@@ -86,7 +97,7 @@ let i = 0
 let prevIsBlack = false
 self.addEventListener('message', async e => {
     if (busy) return
-
+    busy = true
     i++
 
     const meanRgb = [0.485, 0.456, 0.406]
@@ -96,8 +107,10 @@ self.addEventListener('message', async e => {
     const isBlack = i%4 === 0 // Math.random() <= 0.3
     const val = isBlack ? 0 : 255
 
-    for (let i = 0; i < 6; i++) {
-        for (let j = 0; j < 6; j++) {
+    const shift = 50
+    const side = 12
+    for (let i = shift; i < shift + side; i++) {
+        for (let j = shift; j < shift + side; j++) {
             e.data[i][j] = [val, val, val]
         }
     }
@@ -111,9 +124,13 @@ self.addEventListener('message', async e => {
         // .div(stdRgb)
     // console.log((await frameNorm.array())[0][0])
 
-    busy = true
-i%11 && model.resetStates()
-// Math.random() < 0.08 && model.resetStates()
+    
+// i%13 === 0 && model.resetStates()
+    // if (Math.random() < 0.08) {
+    if (i%13 === 0) {
+        console.log("***")
+        model.resetStates()
+    }
 
     const input = tf.stack([frameNorm])
     const res = model.predict(input, {batchSize})
@@ -128,7 +145,7 @@ i%11 && model.resetStates()
 
     prevIsBlack = isBlack
     
-    console.log("Losss: " + h.history.loss[0].toFixed(2))
+    console.log("Loss: " + h.history.loss[0].toFixed(2)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
 
 
     input.dispose()
