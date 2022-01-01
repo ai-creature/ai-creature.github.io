@@ -1,6 +1,7 @@
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
 importScripts("my_gru_layer.js")
 
+
 const batchSize = 1
 const timesteps = 1
 const shape = [timesteps, 1]

@@ -1,6 +1,8 @@
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
 importScripts("my_gru_layer.js")
 
+// import * as tfvis from '@tensorflow/tfjs-vis';
+
 const shape = [128, 256, 3]
 const batchSize = 1
 const kernelSize = [3, 3]
@@ -10,8 +12,9 @@ const padding = 'same'
 const layers = 14
 const inputs = tf.input({batchShape : [batchSize, ...shape]})
 
-let filterPow = 3
+let filterPow = 2
 let outputs = inputs
+
 for (let i = 0; i < layers; i++) {
     if (i%3 == 1) {
         filterPow++
@@ -35,49 +38,50 @@ for (let i = 0; i < layers; i++) {
     }
 }
 
-// outputs = tf.layers.reshape({targetShape: [2, 256]}).apply(outputs)
+// outputs = tf.layers.layerNormalization().apply(outputs)
+
 // outputs = tf.layers.convLstm2d({filters: 64, kernelSize}).apply(outputs)
 // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
 
+outputs = tf.layers.flatten().apply(outputs)
+outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
 
-// outputs = tf.layers.flatten().apply(outputs)
-// outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
+// outputs = tf.layers.reshape({targetShape: [2, 128]}).apply(outputs)
+// outputs = tf.layers.permute({dims: [2,1]}).apply(outputs)
 
 // let rnnState = []
 // ;[outputs, rnnState] = tf.layers.rnn({
-// outputs = tf.layers.rnn({
-//     cell:[
-//         tf.layers.gruCell({
-//             units: 64,
-//             // kernelInitializer: 'heNormal',
-//             // recurrentInitializer: 'heNormal',
-//             // biasInitializer: 'heNormal',
-//             // useBias: true,
-//             trainable: true,
+outputs = tf.layers.rnn({
+    cell:[
+        tf.layers.gruCell({
+            units: 32,
+            // kernelInitializer: 'heNormal',
+            // recurrentInitializer: 'heNormal',
+            // biasInitializer: 'heNormal',
+            // useBias: true,
+            // trainable: true,
 
-//             dropout: 0.1,
-//             recurrentDropout: 0.1,
-//         })
-//     ],
+            // dropout: 0.1,
+            // recurrentDropout: 0.1,
+        })
+    ],
     
-//     stateful: true,
-//     returnSequences: true,
-//     returnState: false
-// }).apply(outputs)
+    stateful: true,
+    returnSequences: false,
+    returnState: false
+}).apply(outputs)
 
 // outputs = tf.layers.dense({units: 32}).apply(outputs)
 
 
-// outputs = tf.layers.reshape({targetShape: [1, 512]}).apply(outputs)
-// outputs = tf.layers.permute({dims: [2,1]}).apply(outputs)
 // outputs = tf.layers.gru({
 //     units: 32, 
 //     stateful: true,
 //     returnSequences: true
 // }).apply(outputs)
 
-outputs = tf.layers.flatten().apply(outputs)
-outputs = new MyGruLayer({units: 64}).apply(outputs)
+// outputs = tf.layers.flatten().apply(outputs)
+// outputs = new MyGruLayer({units: 64}).apply(outputs)
 
 
 
@@ -86,7 +90,7 @@ const model = tf.model({inputs, outputs})
 model.compile({
     optimizer: tf.train.adam(), 
     loss: 'meanSquaredError',
-    //  metrics: ['accuracy']
+     metrics: ['accuracy']
 })
 console.log(model.summary())
 // model.weights.forEach(w => {console.log(w.name, w.shape);});
@@ -95,6 +99,8 @@ console.log(model.summary())
 let busy = false
 let i = 0
 let prevIsBlack = false
+let same = false
+
 self.addEventListener('message', async e => {
     if (busy) return
     busy = true
@@ -104,7 +110,7 @@ self.addEventListener('message', async e => {
     const stdRgb = [0.229, 0.224, 0.225]
 
     // const isBlack = Math.random() <= 0.3
-    const isBlack = i%4 === 0 // Math.random() <= 0.3
+    const isBlack = i%3 === 0 // Math.random() <= 0.3
     const val = isBlack ? 0 : 255
 
     const shift = 50
@@ -127,7 +133,7 @@ self.addEventListener('message', async e => {
     
 // i%13 === 0 && model.resetStates()
     // if (Math.random() < 0.08) {
-    if (i%13 === 0) {
+    if (i%256 === 0) {
         console.log("***")
         model.resetStates()
     }
@@ -135,7 +141,7 @@ self.addEventListener('message', async e => {
     const input = tf.stack([frameNorm])
     const res = model.predict(input, {batchSize})
     // console.log("Pedict: ", res.shape)
-    const labels = i%3 === 0 ? tf.ones(res.shape) : tf.zeros(res.shape)
+    const labels = i%(same ? 3 : 4) === 0 ? tf.ones(res.shape) : tf.zeros(res.shape)
     const h = await model.fit(input, labels, {
         batchSize,
         epochs: 1,
