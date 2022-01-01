@@ -1,26 +1,25 @@
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
 importScripts("my_gru_layer.js")
 
-
 const batchSize = 1
 const timesteps = 1
-const shape = [timesteps, 1]
+const size = 1
+const shape = [timesteps, size]
 const batchShape = [batchSize, ...shape]
 const inputs = tf.input({batchShape})
 const units = 16
 
 let outputs = inputs
+let state
 
-outputs = tf.layers.rnn({
+;[outputs, state] = tf.layers.rnn({
     cell:[
         tf.layers.gruCell({units})
     ],
     stateful: true,
     returnSequences: true,
-    returnState: false
+    returnState: true
 }).apply(outputs)
-
-// outputs = tf.layers.dense({units}).apply(outputs)
 
 const model = tf.model({inputs, outputs})
 model.compile({
@@ -36,75 +35,53 @@ function getRandomInt(min, max) {
 }
 
 const DEBUG = false
+const SAME = false
 
 let busy = false
 let i = 0
 let prevIsBlack = false
+
+let tsInput = []
+let tsLabel = []
+
 let batchInput = []
 let batchLabel = []
+
 self.addEventListener('message', async e => {
     if (busy) return
     busy = true
-    // i++
+    i++
 
-    // if (Math.random() < 0.05) {
-    // if (i%(batchSize*10) === 0) {
-    //     console.log("***")
-    //     model.resetStates()
-    // }
+    // const isBlack = i%3===0
+    const isBlack = getRandomInt(0, 3) === 2
+    if (SAME) prevIsBlack = isBlack 
 
-    // const randIndex = getRandomInt(0, timesteps - 1)
-    // const blackIndex = (randIndex + 1) % timesteps
-    // console.log("randIndex = ", randIndex, (randIndex + 1) % timesteps)
+    const x = isBlack ? tf.zeros([size]) : tf.ones([size])
+    const y = prevIsBlack ? tf.zeros([units]) : tf.ones([units])
 
-    let blackIndex
-    const inputArray = new Array(timesteps).fill().map((el, ind) => {
-        i++
-        if (i%(timesteps + 2) === 0) {
-            blackIndex = ind
-            return 1
-        } else
-            return 0
-    })
+    if (!SAME) prevIsBlack = isBlack 
 
-    let blackIndexLabel
-    if (prevIsBlack) {
-        blackIndexLabel = 0
-        prevIsBlack = false
-    } else if (blackIndex !== undefined && (blackIndex + 1) % timesteps === 0) {
-        prevIsBlack = true
-    } else if (blackIndex !== undefined) {
-        blackIndexLabel = blackIndex + 1
+    tsInput.push(x)
+    tsLabel.push(y)
+
+    if (tsInput.length < timesteps) {
+        busy = false
+        return
     }
 
-    // if (blackIndex !== undefined) {
-    //     blackIndexLabel = blackIndex
-    // }
+    batchInput.push(tf.stack(tsInput))
+    batchLabel.push(tf.stack(tsLabel))
 
-    // inputArray[randIndex] = 1
-    const input = tf.tensor(inputArray, shape)
-    
-    // const res = model.predict(input, {batchSize})
-    
-    const outputArray = new Array(timesteps).fill().map(el => new Array(units).fill(1))
-    if (blackIndexLabel !== undefined) 
-        outputArray[blackIndexLabel] = new Array(units).fill(0)
-    const label = tf.tensor(outputArray, [shape[0], units])
-
-        
-    if (DEBUG) console.log("input = ", inputArray, input.shape)
-    if (DEBUG) console.log("label = ", outputArray, label.shape)
-
-    batchInput.push(input)
-    batchLabel.push(label)
+    tsInput = []
+    tsLabel = []
 
     if (batchInput.length < batchSize) {
         busy = false
         return
     }
 
-    if (DEBUG) console.log("batchInput = ", tf.stack(batchInput).shape)
-    if (DEBUG) console.log("batchLabel = ", tf.stack(batchLabel).shape)
+    if (DEBUG) console.log("batchInput = ", await tf.stack(batchInput).data())
+    if (DEBUG) console.log("batchLabel = ", await tf.stack(batchLabel).data())
 
     const h = await model.fit(tf.stack(batchInput), tf.stack(batchLabel), {
         batchSize,
@@ -115,7 +92,7 @@ self.addEventListener('message', async e => {
     batchInput = []
     batchLabel = []
     
-    console.log("Loss: " + h.history.loss[0].toFixed(2))
+    console.log("Loss: " + h.history.loss[0].toFixed(4))
 
     busy = false
 })

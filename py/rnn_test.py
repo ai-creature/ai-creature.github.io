@@ -1,12 +1,13 @@
 import numpy as np
 import tensorflow as tf
+from random import randrange
 
-batch_size = 10
-timesteps = 11
+batch_size = 1
+timesteps = 1
 size = 1
 shape = (timesteps,size)
 batch_shape = (batch_size, *shape)
-units = 16
+units = 32
 output_shape = (timesteps, units)
 
 model = tf.keras.models.Sequential([
@@ -19,6 +20,7 @@ model = tf.keras.models.Sequential([
     stateful = True,
     return_sequences = True,
     return_state = False,
+    # reset_after = False
   )
   # tf.keras.layers.Dense(units)
 ])
@@ -30,17 +32,26 @@ model.compile(optimizer='adam',
 
 print(model.summary())
 
-max_it = 2000
 i = 0
+SAME = False
 
 x_batch, y_batch = [], []
 x_steps, y_steps = [], []
 
+prevIsBlack = False
+
 while True:
   i += 1
 
-  x_train = np.ones(size)         if i%3 == 0         else np.zeros(size) #tf.Tensor(np.ones(shape), shape=shape, dtype=int32)
-  y_train = np.zeros(units) if i%4 == 0 else np.ones(units)
+  # isBlack = i%3 == 0
+  isBlack = randrange(4) == 2
+
+  if SAME: prevIsBlack = isBlack 
+
+  x_train = np.ones(size)   if isBlack else np.zeros(size) #tf.Tensor(np.ones(shape), shape=shape, dtype=int32)
+  y_train = np.zeros(units) if prevIsBlack else np.ones(units)
+
+  if not SAME: prevIsBlack = isBlack 
 
   x_steps.append(x_train)
   y_steps.append(y_train)
@@ -55,12 +66,14 @@ while True:
   if len(x_batch) < batch_size:
     continue
 
-  model.fit(np.stack(x_batch), np.stack(y_batch), 
+  res = model.fit(np.stack(x_batch), np.stack(y_batch), 
     epochs = 1, 
     shuffle = False,
     batch_size = batch_size)
 
-  model.evaluate(np.stack(x_batch), np.stack(y_batch))
+  print(res.history["loss"])
+
+  # model.evaluate(np.stack(x_batch), np.stack(y_batch))
 
   x_batch = []
   y_batch = []
