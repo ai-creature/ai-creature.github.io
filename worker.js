@@ -5,12 +5,15 @@ importScripts("my_gru_layer.js")
 
 const shape = [128, 256, 3]
 const batchSize = 1
+const rnnUnits = 32
 const kernelSize = [3, 3]
 const poolSize = 2
 const strides = 1
 const padding = 'same'
 const layers = 14
+
 const inputs = tf.input({batchShape : [batchSize, ...shape]})
+const inputsInitState = tf.input({batchShape : [batchSize, rnnUnits]})
 
 let filterPow = 2
 let outputs = inputs
@@ -40,66 +43,42 @@ for (let i = 0; i < layers; i++) {
 
 // outputs = tf.layers.layerNormalization().apply(outputs)
 
-// outputs = tf.layers.convLstm2d({filters: 64, kernelSize}).apply(outputs)
-// outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-outputs = tf.layers.flatten().apply(outputs)
-outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
 
 // outputs = tf.layers.reshape({targetShape: [2, 128]}).apply(outputs)
 // outputs = tf.layers.permute({dims: [2,1]}).apply(outputs)
 
-// let rnnState = []
-// ;[outputs, rnnState] = tf.layers.rnn({
-outputs = tf.layers.rnn({
-    cell:[
-        tf.layers.gruCell({
-            units: 32,
-            // kernelInitializer: 'heNormal',
-            // recurrentInitializer: 'heNormal',
-            // biasInitializer: 'heNormal',
-            // useBias: true,
-            // trainable: true,
-
-            // dropout: 0.1,
-            // recurrentDropout: 0.1,
-        })
-    ],
-    
+outputs = tf.layers.flatten().apply(outputs)
+outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
+let rnnState = []
+;[outputs, rnnState] = tf.layers.gru({
+    units: rnnUnits,
     stateful: true,
     returnSequences: false,
-    returnState: false
-}).apply(outputs)
+    returnState: true
+}).apply(outputs/*, {initialState: inputsInitState}/*)
 
 // outputs = tf.layers.dense({units: 32}).apply(outputs)
 
-
-// outputs = tf.layers.gru({
-//     units: 32, 
-//     stateful: true,
-//     returnSequences: true
-// }).apply(outputs)
-
 // outputs = tf.layers.flatten().apply(outputs)
-// outputs = new MyGruLayer({units: 64}).apply(outputs)
+// outputs = new MyGruLayer({units: rnnUnits}).apply(outputs/*[outputs, inputsInitState]*/)
 
-
-
-
-const model = tf.model({inputs, outputs})
+const model = tf.model({inputs/*: [inputs, inputsInitState]*/, outputs})
+const optimizer = tf.train.adam();
 model.compile({
-    optimizer: tf.train.adam(), 
+    optimizer, 
     loss: 'meanSquaredError',
-     metrics: ['accuracy']
+    // metrics: ['accuracy']
 })
-console.log(model.summary())
-// model.weights.forEach(w => {console.log(w.name, w.shape);});
 
+console.log(model.summary())
 
 let busy = false
 let i = 0
 let prevIsBlack = false
-let same = false
+
+const SAME = false
+
+// let prevState = tf.randomNormal([batchSize, rnnUnits])
 
 self.addEventListener('message', async e => {
     if (busy) return
@@ -139,9 +118,11 @@ self.addEventListener('message', async e => {
     }
 
     const input = tf.stack([frameNorm])
-    const res = model.predict(input, {batchSize})
-    // console.log("Pedict: ", res.shape)
-    const labels = i%(same ? 3 : 4) === 0 ? tf.ones(res.shape) : tf.zeros(res.shape)
+
+    if (SAME) prevIsBlack = isBlack
+
+    const labels = prevIsBlack ? tf.ones([1, rnnUnits]) : tf.zeros([1, rnnUnits])
+    //console.log(val, labels.dataSync())
     const h = await model.fit(input, labels, {
         batchSize,
         epochs: 1,
@@ -149,13 +130,13 @@ self.addEventListener('message', async e => {
         verbose: 2
     })
 
-    prevIsBlack = isBlack
+    if (!SAME) prevIsBlack = isBlack
     
-    console.log("Loss: " + h.history.loss[0].toFixed(2)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
+    console.log("Loss: " + h.history.loss[0].toFixed(4)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
 
 
     input.dispose()
-    res.dispose()
+    // res.dispose()
     labels.dispose()
 
     
@@ -184,7 +165,7 @@ self.addEventListener('message', async e => {
     frameNorm.dispose()
 
     self.postMessage(data)
-
+    // console.log("busy = false")
     busy = false
 })
 
