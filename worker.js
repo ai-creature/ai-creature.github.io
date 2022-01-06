@@ -13,7 +13,6 @@ const padding = 'same'
 const layers = 14
 
 const inputs = tf.input({batchShape : [batchSize, ...shape]})
-const inputsInitState = tf.input({batchShape : [batchSize, rnnUnits]})
 
 let filterPow = 2
 let outputs = inputs
@@ -63,12 +62,12 @@ let rnnState = []
 // outputs = new MyGruLayer({units: rnnUnits}).apply(outputs/*[outputs, inputsInitState]*/)
 
 const model = tf.model({inputs/*: [inputs, inputsInitState]*/, outputs})
-const optimizer = tf.train.adam();
-model.compile({
-    optimizer, 
-    loss: 'meanSquaredError',
-    // metrics: ['accuracy']
-})
+const optimizer = tf.train.adam()
+// model.compile({
+//     optimizer, 
+//     loss: 'meanSquaredError',
+//     // metrics: ['accuracy']
+// })
 
 console.log(model.summary())
 
@@ -88,7 +87,7 @@ self.addEventListener('message', async e => {
     const meanRgb = [0.485, 0.456, 0.406]
     const stdRgb = [0.229, 0.224, 0.225]
 
-    // const isBlack = Math.random() <= 0.3
+    // const isBlack = Math.random() <= 0.5
     const isBlack = i%3 === 0 // Math.random() <= 0.3
     const val = isBlack ? 0 : 255
 
@@ -107,12 +106,8 @@ self.addEventListener('message', async e => {
         .div(tf.scalar(255))
         // .sub(meanRgb)
         // .div(stdRgb)
-    // console.log((await frameNorm.array())[0][0])
 
-    
-// i%13 === 0 && model.resetStates()
-    // if (Math.random() < 0.08) {
-    if (i%256 === 0) {
+    if (i%32 === 0) {
         console.log("***")
         model.resetStates()
     }
@@ -123,40 +118,45 @@ self.addEventListener('message', async e => {
 
     const labels = prevIsBlack ? tf.ones([1, rnnUnits]) : tf.zeros([1, rnnUnits])
     //console.log(val, labels.dataSync())
-    const h = await model.fit(input, labels, {
-        batchSize,
-        epochs: 1,
-        shuffle: false,
-        verbose: 2
+    // const h = await model.fit(input, labels, {
+    //     batchSize,
+    //     epochs: 1,
+    //     shuffle: false,
+    //     verbose: 2
+    // })
+
+    
+    // console.log("Loss: " + h.history.loss[0].toFixed(4)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
+    
+    const lossFunction = () => tf.tidy(() => {
+        const preds = model.predict(input)
+        // const preds = model.apply(input, {training: true})
+        
+        return tf.losses.meanSquaredError(labels, preds).asScalar()
     })
 
+    // const grads = optimizer.computeGradients(f)
+    const {value, grads} = tf.variableGrads(lossFunction)
+    
+    // optimizer.applyGradients(tf.zip(model.weights, grads))
+    optimizer.applyGradients(grads)
+     
+    console.log("Loss: " + value)
+    
+    
     if (!SAME) prevIsBlack = isBlack
     
-    console.log("Loss: " + h.history.loss[0].toFixed(4)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
-
+    
+    
+    
+    
+    
+    tf.dispose(value)
+    tf.dispose(grads)
 
     input.dispose()
     // res.dispose()
     labels.dispose()
-
-    
-
-    /*const optimizer = tf.train.rmsprop(0.01)
-    const labels = tf.ones(res.shape)
-    optimizer.minimize(() => {
-        const pred = model.predict(input, {batchSize})
-        const loss = tf.losses.meanSquaredError(labels, pred);
-        
-        loss.data().then(h => {
-            busy = false
-            console.log('Loss: ', h[0])
-        })
-        
-        return loss;
-    })*/
-    
-    // else console.log("skip")
-
 
     const data = await frame.array()
     // console.log(data[0][0])
@@ -165,7 +165,7 @@ self.addEventListener('message', async e => {
     frameNorm.dispose()
 
     self.postMessage(data)
-    // console.log("busy = false")
+
     busy = false
 })
 
