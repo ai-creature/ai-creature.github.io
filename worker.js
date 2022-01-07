@@ -1,94 +1,71 @@
-importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js");
-importScripts("my_gru_layer.js")
-
+importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js")
 // import * as tfvis from '@tensorflow/tfjs-vis';
 
+const [TRUE, FALSE] = [true, false]
+
 const shape = [128, 256, 3]
+const stackFrames = 1
 const batchSize = 1
-const rnnUnits = 32
-const kernelSize = [3, 3]
-const poolSize = 2
-const strides = 1
-const padding = 'same'
-const layers = 14
+const outputUnits = 1
 
-const inputs = tf.input({batchShape : [batchSize, ...shape]})
-
-let filterPow = 2
+const inputs = tf.input({batchShape : [batchSize, ...shape.slice(0, 2), shape[2]*stackFrames]})
 let outputs = inputs
 
-for (let i = 0; i < layers; i++) {
-    if (i%3 == 1) {
-        filterPow++
-    }
+function getConvEncoder(outputs) {
+    const kernelSize = [3, 3]
+    const poolSize = 2
+    const strides = 1
+    const padding = 'same'
+    const layers = 14
+    
+    let filterPow = 2
+    
+    for (let i = 0; i < layers; i++) {
+        if (i%3 == 1) 
+            filterPow++
 
-    outputs = tf.layers.conv2d({
-        filters: 2**filterPow,
-        kernelSize,
-        strides,
-        padding,
-        activation: 'relu',
-        kernelInitializer: 'heNormal',
-        biasInitializer: 'heNormal',
-        trainable: true
-    }).apply(outputs)
-
-    if (i%2 == 1) {
-        outputs = tf.layers.maxPooling2d({
-            poolSize
+        outputs = tf.layers.conv2d({
+            filters: 2**filterPow,
+            kernelSize,
+            strides,
+            padding,
+            activation: 'relu',
+            kernelInitializer: 'heNormal',
+            biasInitializer: 'heNormal',
+            trainable: true
         }).apply(outputs)
+    
+        if (i%2 == 1) 
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
     }
+
+    return outputs
 }
 
-// outputs = tf.layers.layerNormalization().apply(outputs)
-
-
-// outputs = tf.layers.reshape({targetShape: [2, 128]}).apply(outputs)
-// outputs = tf.layers.permute({dims: [2,1]}).apply(outputs)
-
+outputs = getConvEncoder(outputs)
 outputs = tf.layers.flatten().apply(outputs)
-outputs = tf.layers.repeatVector({n: 2}).apply(outputs)
-let rnnState = []
-;[outputs, rnnState] = tf.layers.gru({
-    units: rnnUnits,
-    stateful: true,
-    returnSequences: false,
-    returnState: true
-}).apply(outputs/*, {initialState: inputsInitState}/*)
+outputs = tf.layers.dense({units: outputUnits, activation: 'linear'}).apply(outputs)
 
-// outputs = tf.layers.dense({units: 32}).apply(outputs)
-
-// outputs = tf.layers.flatten().apply(outputs)
-// outputs = new MyGruLayer({units: rnnUnits}).apply(outputs/*[outputs, inputsInitState]*/)
-
-const model = tf.model({inputs/*: [inputs, inputsInitState]*/, outputs})
 const optimizer = tf.train.adam()
-// model.compile({
-//     optimizer, 
-//     loss: 'meanSquaredError',
-//     // metrics: ['accuracy']
-// })
-
+const model = tf.model({inputs, outputs})
 console.log(model.summary())
 
-let busy = false
+let busy = TRUE
 let i = 0
-let prevIsBlack = false
+let prevIsBlack = FALSE
 
-const SAME = false
+const SAME = FALSE
 
-// let prevState = tf.randomNormal([batchSize, rnnUnits])
+let stack = []
+let stack2 = []
 
 self.addEventListener('message', async e => {
     if (busy) return
-    busy = true
+    busy = TRUE
     i++
 
-    const meanRgb = [0.485, 0.456, 0.406]
-    const stdRgb = [0.229, 0.224, 0.225]
-
     // const isBlack = Math.random() <= 0.5
-    const isBlack = i%3 === 0 // Math.random() <= 0.3
+    const isBlack = i%3 === 0
     const val = isBlack ? 0 : 255
 
     const shift = 50
@@ -100,72 +77,53 @@ self.addEventListener('message', async e => {
     }
 
     const frame = tf.tensor3d(e.data, shape, 'float32')
-    // const frame = isBlack ? tf.fill(shape, 0, 'float32') : tf.fill(shape, 255, 'float32')
+    const frameNorm = frame.div(tf.scalar(255))
 
-    const frameNorm = frame
-        .div(tf.scalar(255))
-        // .sub(meanRgb)
-        // .div(stdRgb)
+    stack.push(frameNorm)
+    stack2.push(frame)
 
-    if (i%32 === 0) {
+    if (stack.length < stackFrames) {
+        busy = FALSE
+        return
+    }
+
+    if (i%64 === 0) {
         console.log("***")
         model.resetStates()
     }
 
-    const input = tf.stack([frameNorm])
+    const input = tf.stack([tf.concat(stack, 2)])
 
     if (SAME) prevIsBlack = isBlack
-
-    const labels = prevIsBlack ? tf.ones([1, rnnUnits]) : tf.zeros([1, rnnUnits])
-    //console.log(val, labels.dataSync())
-    // const h = await model.fit(input, labels, {
-    //     batchSize,
-    //     epochs: 1,
-    //     shuffle: false,
-    //     verbose: 2
-    // })
-
-    
-    // console.log("Loss: " + h.history.loss[0].toFixed(4)/*, "Acc: " + h.history.acc[0].toFixed(2)*/)
+    const labels = prevIsBlack ? tf.ones([1, outputUnits]) : tf.zeros([1, outputUnits])
+    if (!SAME) prevIsBlack = isBlack
     
     const lossFunction = () => tf.tidy(() => {
         const preds = model.predict(input)
-        // const preds = model.apply(input, {training: true})
-        
+
         return tf.losses.meanSquaredError(labels, preds).asScalar()
     })
 
-    // const grads = optimizer.computeGradients(f)
     const {value, grads} = tf.variableGrads(lossFunction)
-    
-    // optimizer.applyGradients(tf.zip(model.weights, grads))
+
     optimizer.applyGradients(grads)
      
     console.log("Loss: " + value)
     
-    
-    if (!SAME) prevIsBlack = isBlack
-    
-    
-    
-    
-    
-    
     tf.dispose(value)
     tf.dispose(grads)
-
     input.dispose()
-    // res.dispose()
     labels.dispose()
 
     const data = await frame.array()
-    // console.log(data[0][0])
 
-    frame.dispose()
-    frameNorm.dispose()
+    stack.forEach(frameNorm => frameNorm.dispose())
+    stack2.forEach(frame => frame.dispose())
+    stack = []
+    stack2 = []
 
     self.postMessage(data)
 
-    busy = false
+    busy = FALSE
 })
 
