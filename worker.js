@@ -1,5 +1,6 @@
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js")
-// import * as tfvis from '@tensorflow/tfjs-vis';
+importScripts("z_layer.js")
+importScripts("agent_sac.js")
 
 const [TRUE, FALSE] = [true, false]
 
@@ -50,31 +51,18 @@ const optimizer = tf.train.adam()
 const model = tf.model({inputs, outputs})
 console.log(model.summary())
 
+const SAME = FALSE
 let busy = TRUE
 let i = 0
 let prevIsBlack = FALSE
-
-const SAME = FALSE
-
 let stack = []
 let stack2 = []
+
 
 self.addEventListener('message', async e => {
     if (busy) return
     busy = TRUE
     i++
-
-    // const isBlack = Math.random() <= 0.5
-    const isBlack = i%3 === 0
-    const val = isBlack ? 0 : 255
-
-    const shift = 50
-    const side = 12
-    for (let i = shift; i < shift + side; i++) {
-        for (let j = shift; j < shift + side; j++) {
-            e.data[i][j] = [val, val, val]
-        }
-    }
 
     const frame = tf.tensor3d(e.data, shape, 'float32')
     const frameNorm = frame.div(tf.scalar(255))
@@ -87,16 +75,7 @@ self.addEventListener('message', async e => {
         return
     }
 
-    if (i%64 === 0) {
-        console.log("***")
-        model.resetStates()
-    }
-
     const input = tf.stack([tf.concat(stack, 2)])
-
-    if (SAME) prevIsBlack = isBlack
-    const labels = prevIsBlack ? tf.ones([1, outputUnits]) : tf.zeros([1, outputUnits])
-    if (!SAME) prevIsBlack = isBlack
     
     const lossFunction = () => tf.tidy(() => {
         const preds = model.predict(input)
