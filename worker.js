@@ -38,10 +38,10 @@ self.addEventListener('message', async e => {
 
     const input = tf.stack([tf.concat(stack, 2)])
 
-    const [action, logExpr] = agent.getAction(input)
+    const [action, logExpr] = agent.sampleAction(input)
 
-    console.log("ACTION: ", action)
-    console.log("ARRAY: ", await action.array())
+    console.log("ACTION: ", logExpr)
+    console.log("ARRAY: ", await logExpr.array())
     
     // const lossFunction = () => tf.tidy(() => {
     //     const preds = model.predict(input)

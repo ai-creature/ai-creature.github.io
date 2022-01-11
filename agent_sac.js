@@ -1,5 +1,6 @@
 /**
  * Soft Actor Critic Agent https://arxiv.org/abs/1812.05905
+ * without value network.
  */
 class AgentSac {
     constructor({
@@ -7,24 +8,63 @@ class AgentSac {
         shape = [128, 256, 3], 
         batchSize = 1, 
         nFrames = 1,
-        noise = 1e-6
+        noise = 1e-6,
+        gamma = 0.99,
+        tau = 5e-3,
+        rewardScale = 2
     }) {
         this.nActions = nActions
         this.shape = shape 
         this.batchSize = batchSize
         this.nFrames = nFrames
         this.noise = noise
+        this.gamma = gamma
+        this.tau = tau
+        this.rewardScale = rewardScale
 
-        this._frameInput = tf.input({batchShape : [batchSize, ...this.shape.slice(0, 2), shape[2]*nFrames]})
+        this._frameInput = tf.input({batchShape : [batchSize, ...this.shape.slice(0, 2), shape[2] * nFrames]})
 
-        this.q1 = this._getCritic("q1")
+        this.q1 = this._getCritic("Q1")
         this.q1Optimizer = tf.train.adam()
 
-        this.q2 = this._getCritic("q2")
+        this.q1Targ = this._getCritic("Q1_target")
+        this.q1Targ.trainable = false
+
+        this.q2 = this._getCritic("Q2")
         this.q2Optimizer = tf.train.adam()
+        
+        this.q2Targ = this._getCritic("Q2_target")
+        this.q2Targ.trainable = false
 
         this.actor = this._getActor()
         this.actorOptimizer = tf.train.adam()
+
+        this.updateTargets(1)
+    }
+
+    /**
+     *  Soft update target Q-networks.
+     * 
+     * @param {number} tau - interpolation factor in polyak averaging: `wTarg <- wTarg*(1-tau) + w*tau`
+     */
+    updateTargets(tau) {
+        tau = tf.scalar(tau)
+
+        const q1W = this.q1.getWeights(),
+            q2W = this.q2.getWeights(),
+            q1WTarg = this.q1Targ.getWeights(),
+            q2WTarg = this.q2Targ.getWeights(),
+            len = q1W.length
+
+        const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
+        const w1 = [], w2 = []
+        for (let i = 0; i < len; i++) {
+            w1.push(calc(q1W[i], q1WTarg[i]))
+            w2.push(calc(q2W[i], q2WTarg[i]))
+        }
+
+        this.q1Targ.setWeights(w1)
+        this.q2Targ.setWeights(w2)
     }
 
     /**
@@ -33,7 +73,7 @@ class AgentSac {
      * @param {Tensor} state - state
      * @returns {Tensor[]} actions and log expression for loss function
      */
-    getAction(state) {
+    sampleAction(state) {
         let [mu, sigma] = this.actor.predict(state)
         sigma = tf.clipByValue(sigma, this.noise, 1) // do we need to clip sigma???
   
@@ -54,7 +94,7 @@ class AgentSac {
           )
         ).sum(1, true)
 
-        return [action, logExpr]
+        return [action, logProb]
     }
 
     /**
@@ -150,8 +190,7 @@ class AgentSac {
                 padding,
                 activation: 'relu',
                 kernelInitializer: 'heNormal',
-                biasInitializer: 'heNormal',
-                trainable: true
+                biasInitializer: 'heNormal'
             }).apply(outputs)
         
             if (i%2 == 1) 
