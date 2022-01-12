@@ -21,7 +21,7 @@ let stack = []
 let stack2 = []
 
 self.addEventListener('message', async e => {
-    if (busy) return
+    if (busy || i > 1000) return
     busy = TRUE
     i++
 
