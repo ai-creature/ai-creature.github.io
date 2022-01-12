@@ -223,7 +223,6 @@
                     height: 128
                 })
 
-
                 proj.material.diffuseTexture = new BABYLON.Texture(base64Data, scene)
 
                 function base64ToImg(base64) {
@@ -233,9 +232,9 @@
                         img.onload = () => resolve(img)
                     });
                 }
-
                 const img = await base64ToImg(base64Data)
                 const tensor = tf.browser.fromPixels(img)
+
                 worker.postMessage(await tensor.array())
                 tensor.dispose()
             })

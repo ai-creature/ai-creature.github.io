@@ -4,37 +4,41 @@
  */
 class AgentSac {
     constructor({
-        nActions = 9, 
-        shape = [128, 256, 3], 
         batchSize = 1, 
-        nFrames = 1,
-        noise = 1e-6,
-        gamma = 0.99,
-        tau = 5e-3,
+        frameShape = [128, 256, 3], 
+        nFrames = 1, // Number of stacked frames per state
+        nActions = 9, // 3 impulses by axis, 3 rotations, rgb color
+        nTelemetry = 6, // 3 angular speeds and 3 speeds by axis
+        epsilon = 1e-6, // Small number
+        alpha = 0.5, // Entropy scale
+        gamma = 0.99, // Discount factor (γ)
+        tau = 5e-3, // Target smoothing coefficient (τ)
         rewardScale = 2
     }) {
-        this.nActions = nActions
-        this.shape = shape 
         this.batchSize = batchSize
+        this.frameShape = frameShape 
         this.nFrames = nFrames
-        this.noise = noise
+        this.nActions = nActions
+        this.nTelemetry = nTelemetry
+        this.epsilon = epsilon
+        this.alpha = alpha
         this.gamma = gamma
         this.tau = tau
         this.rewardScale = rewardScale
 
-        this._frameInput = tf.input({batchShape : [batchSize, ...this.shape.slice(0, 2), shape[2] * nFrames]})
+        this._frameInput = tf.input({batchShape : [null, ...frameShape.slice(0, 2), frameShape[2] * nFrames]})
+        this._telemetryInput = tf.input({batchShape : [null, nTelemetry]})
+        this._actionInput = tf.input({batchShape : [null, nActions]})
 
         this.q1 = this._getCritic("Q1")
         this.q1Optimizer = tf.train.adam()
 
-        this.q1Targ = this._getCritic("Q1_target")
-        this.q1Targ.trainable = false
+        this.q1Targ = this._getCritic("Q1_target", false)
 
         this.q2 = this._getCritic("Q2")
         this.q2Optimizer = tf.train.adam()
         
-        this.q2Targ = this._getCritic("Q2_target")
-        this.q2Targ.trainable = false
+        this.q2Targ = this._getCritic("Q2_target", false)
 
         this.actor = this._getActor()
         this.actorOptimizer = tf.train.adam()
@@ -42,12 +46,51 @@ class AgentSac {
         this.updateTargets(1)
     }
 
+    _assertShape(tensor, shape, msg = "") {
+        tf.util.assert(JSON.stringify(tensor.shape) === JSON.stringify(shape), 
+            "[_assertShape] " + msg + ': ' + tensor.shape + ' is not ' + shape);
+    }
+
+    learn(st) {
+        const state = st,
+            // action = tf.tensor([1, new Array(this.nActions).fill().map(_ => Math.random())]),
+            reward = tf.tensor([1, 1]),
+            nextState = tf.onesLike(state.shape)
+
+        // TODO: consider delayed update of policy and targets
+        const actorLossFunction = () => {
+            const [freshAction, logProb] = this.sampleAction(state)
+            this._assertShape(freshAction, [this.batchSize, this.nActions], "freshAction")
+            this._assertShape(logProb, [this.batchSize, 1], "logProb")
+
+            const q1Value = this.q1.predict([state, freshAction], {batchSize: this.batchSize})
+            const q2Value = this.q2.predict([state, freshAction], {batchSize: this.batchSize})
+            this._assertShape(q1Value, [this.batchSize, 1], "q1Value")
+            this._assertShape(q2Value, [this.batchSize, 1], "q2Value")
+
+            const criticValue = tf.minimum(q1Value, q2Value)
+            this._assertShape(criticValue, [this.batchSize, 1], "criticValue")
+
+            const loss = tf.mean(tf.scalar(this.alpha).mul(logProb).sub(criticValue))
+
+            return loss
+        }
+
+        const {value, grads} = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
+
+        this.actorOptimizer.applyGradients(grads)
+     
+        console.log("Loss: " + value)
+
+        // this.updateTargets()
+    }
+
     /**
-     *  Soft update target Q-networks.
+     * Soft update target Q-networks.
      * 
      * @param {number} tau - interpolation factor in polyak averaging: `wTarg <- wTarg*(1-tau) + w*tau`
      */
-    updateTargets(tau) {
+    updateTargets(tau = this.tau) {
         tau = tf.scalar(tau)
 
         const q1W = this.q1.getWeights(),
@@ -68,14 +111,16 @@ class AgentSac {
     }
 
     /**
-     * Returns actions sampled from normal distribution using means and sigmas predicterd by the actor.
+     * Returns actions sampled from normal distribution using means and sigmas predicted by the actor.
      * 
      * @param {Tensor} state - state
-     * @returns {Tensor[]} actions and log expression for loss function
+     * @returns {Tensor[]} action and log policy
      */
     sampleAction(state) {
-        let [mu, sigma] = this.actor.predict(state)
-        sigma = tf.clipByValue(sigma, this.noise, 1) // do we need to clip sigma???
+        let [mu, sigma] = this.actor.predict(state, {batchSize: this.batchSize})
+        sigma = tf.clipByValue(sigma, this.epsilon, 1) // do we need to clip sigma??? 
+        // TODO: output log(std) instead of std
+        // assert LOG_SIG_MIN <= self.log_std <= LOG_SIG_MAX https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
   
         // sample epsilon N(mu = 0, sigma = 1)
         const epsilon = tf.randomNormal(mu.shape.slice(0, 2), 0, 1.0)
@@ -86,15 +131,16 @@ class AgentSac {
         const action = tf.tanh(reparamSample) // * 1 max_action is 1?
         const logProb = this._logProb(reparamSample, mu, sigma)
   
-        const logExpr = logProb.sub(
+        // Enforcing Action Bound
+        const logProbBounded = logProb.sub(
           tf.log(
             tf.scalar(1)
               .sub(action.pow(tf.scalar(2).toInt()))
-              .add(this.noise)
+              .add(this.epsilon)
           )
-        ).sum(1, true)
+        ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
 
-        return [action, logProb]
+        return [action, logProbBounded]
     }
 
     /**
@@ -107,7 +153,6 @@ class AgentSac {
      * @returns Log probability
      */
     _logProb(x, mu, sigma)  {
-        // sigma = tf.convert_to_tensor(sigma) // already tensor???
         const logUnnormalized = tf.scalar(-0.5).mul(
             tf.squaredDifference(x.div(sigma), mu.div(sigma))
         )
@@ -116,6 +161,12 @@ class AgentSac {
         return logUnnormalized.sub(logNormalization)
     }
 
+    /**
+     * Builds actor network model.
+     * 
+     * @param {string} name - name of the model
+     * @returns model
+     */
     _getActor(name = "actor") {
         let outputs = this._getConvEncoder(this._frameInput)
         outputs = tf.layers.flatten().apply(outputs)
@@ -142,17 +193,19 @@ class AgentSac {
      * @param {string} name - name of the model
      * @returns model
      */
-    _getCritic(name = "critic") {
-        let outputs = this._getConvEncoder(this._frameInput)
+    _getCritic(name = "critic", trainable = true) {
+        let convOutputs = this._getConvEncoder(this._frameInput)
+        convOutputs = tf.layers.flatten().apply(convOutputs)
 
-        outputs = tf.layers.flatten().apply(outputs)
+        const concatOutput = tf.layers.concatenate().apply([convOutputs, this._actionInput])
 
-        outputs = tf.layers.dense({units: 128, activation: "relu"}).apply(outputs)
+        let outputs = tf.layers.dense({units: 128, activation: "relu"}).apply(concatOutput)
         outputs = tf.layers.dense({units: 64 , activation: "relu"}).apply(outputs)
 
         outputs = tf.layers.dense({units: 1}).apply(outputs)
 
-        const model = tf.model({inputs: this._frameInput, outputs, name})
+        const model = tf.model({inputs: [this._frameInput, this._actionInput], outputs, name})
+        model.trainable = trainable
 
         console.log("==========================")
         console.log("==========================")
@@ -202,5 +255,4 @@ class AgentSac {
 
     save() {}
     load() {}
-    learn() {}
 }

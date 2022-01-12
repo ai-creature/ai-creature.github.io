@@ -38,10 +38,20 @@ self.addEventListener('message', async e => {
 
     const input = tf.stack([tf.concat(stack, 2)])
 
-    const [action, logExpr] = agent.sampleAction(input)
+    tf.tidy(()=>{
+        console.time("learn")
+        agent.learn(input)
+        console.timeEnd("learn")
+    })
 
-    console.log("ACTION: ", logExpr)
-    console.log("ARRAY: ", await logExpr.array())
+
+    // const [action, logProb] = agent.sampleAction(input)
+    // console.log("ACTION: ", logProb)
+    // console.log("ARRAY: ", await logProb.array())
+
+
+
+    //learn(st)
     
     // const lossFunction = () => tf.tidy(() => {
     //     const preds = model.predict(input)
@@ -55,8 +65,8 @@ self.addEventListener('message', async e => {
      
     // console.log("Loss: " + value)
     
-    tf.dispose(action)
-    tf.dispose(logExpr)
+    // tf.dispose(action)
+    // tf.dispose(logProb)
     // tf.dispose(value)
     // tf.dispose(grads)
     input.dispose()
@@ -69,7 +79,10 @@ self.addEventListener('message', async e => {
     stack = []
     stack2 = []
 
-    self.postMessage(data)
+    if (i%24 < 5) {
+
+        self.postMessage(data)
+    }
 
     busy = FALSE
 })
