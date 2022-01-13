@@ -21,7 +21,7 @@ let stack = []
 let stack2 = []
 
 self.addEventListener('message', async e => {
-    if (busy || i > 1000) return
+    if (busy || i > 50) return
     busy = TRUE
     i++
 
@@ -38,11 +38,11 @@ self.addEventListener('message', async e => {
 
     const input = tf.stack([tf.concat(stack, 2)])
 
+    console.time("learn timer")
     tf.tidy(()=>{
-        console.time("learn")
         agent.learn(input)
-        console.timeEnd("learn")
     })
+    console.timeEnd("learn timer")
 
 
     // const [action, logProb] = agent.sampleAction(input)
@@ -79,10 +79,10 @@ self.addEventListener('message', async e => {
     stack = []
     stack2 = []
 
-    if (i%24 < 5) {
+    // if (i%24 < 5) {
 
         self.postMessage(data)
-    }
+    // }
 
     busy = FALSE
 })

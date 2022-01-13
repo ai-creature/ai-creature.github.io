@@ -26,37 +26,42 @@ class AgentSac {
         alpha = 0.5, // Entropy scale (α)
         gamma = 0.99, // Discount factor (γ)
         tau = 5e-3, // Target smoothing coefficient (τ)
-        rewardScale = 2
+        rewardScale = 2,
+        trainable = true // Whether the actor is trainable
     }) {
-        this.batchSize = batchSize
-        this.frameShape = frameShape 
-        this.nFrames = nFrames
-        this.nActions = nActions
-        this.nTelemetry = nTelemetry
-        this.epsilon = epsilon
-        this.alpha = alpha
-        this.gamma = gamma
-        this.tau = tau
-        this.rewardScale = rewardScale
+        this._batchSize = batchSize
+        this._frameShape = frameShape 
+        this._nFrames = nFrames
+        this._nActions = nActions
+        this._nTelemetry = nTelemetry
+        this._epsilon = epsilon
+        this._alpha = alpha
+        this._gamma = gamma
+        this._tau = tau
+        this._rewardScale = rewardScale
+        this._trainable = trainable
 
         this._frameInput = tf.input({batchShape : [null, ...frameShape.slice(0, 2), frameShape[2] * nFrames]})
         this._telemetryInput = tf.input({batchShape : [null, nTelemetry]})
         this._actionInput = tf.input({batchShape : [null, nActions]})
 
-        this.q1 = this._getCritic('Q1')
-        this.q1Optimizer = tf.train.adam()
+        this.actor = this._getActor('Actor', trainable)
 
-        this.q1Targ = this._getCritic('Q1_target', false)
+        if (this._trainable) {
+            this.actorOptimizer = tf.train.adam()
 
-        this.q2 = this._getCritic('Q2')
-        this.q2Optimizer = tf.train.adam()
-        
-        this.q2Targ = this._getCritic('Q2_target', false)
+            this.q1 = this._getCritic('Q1')
+            this.q1Optimizer = tf.train.adam()
 
-        this.actor = this._getActor()
-        this.actorOptimizer = tf.train.adam()
+            this.q1Targ = this._getCritic('Q1_target', false)
 
-        this.updateTargets(1)
+            this.q2 = this._getCritic('Q2')
+            this.q2Optimizer = tf.train.adam()
+            
+            this.q2Targ = this._getCritic('Q2_target', false)
+
+            this.updateTargets(1)
+        }
     }
 
     /**
@@ -65,45 +70,49 @@ class AgentSac {
      * @param {*} st 
      */
     learn(st) {
-        const state = st,
-            action = tf.ones([this.batchSize, this.nActions]),
-            reward = tf.ones([this.batchSize, 1]),
+        if (!this._trainable) {
+            throw new Error('Actor is not trainable')
+        }
+
+        const 
+            state = st,
+            action = tf.ones([this._batchSize, this._nActions]),
+            reward = tf.ones([this._batchSize, 1]),
             nextState = tf.onesLike(state)
 
-        assertShape(state, [this.batchSize, ...this.frameShape], "state")
-        assertShape(action, [this.batchSize, this.nActions], "action")
-        assertShape(reward, [this.batchSize, 1], "reward")
-        assertShape(nextState, state.shape, "nextState")
+        assertShape(state, [this._batchSize, ...this._frameShape], 'state')
+        assertShape(action, [this._batchSize, this._nActions], 'action')
+        assertShape(reward, [this._batchSize, 1], 'reward')
+        assertShape(nextState, state.shape, 'nextState')
 
-console.time("= QLearn timer")
         const getQLossFunction = (() => {
             const [nextFreshAction, logProb] = this.sampleAction(nextState)
             
-            const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this.batchSize})
-            const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this.batchSize})
+            const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
+            const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
             
             const qTargValue = tf.minimum(q1TargValue, q2TargValue)
 
             // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
-            const target = reward.mul(tf.scalar(this.rewardScale))
+            const target = reward.mul(tf.scalar(this._rewardScale))
                 .add(
-                    tf.scalar(this.gamma).mul(
-                        qTargValue.sub(tf.scalar(this.alpha).mul(logProb))
+                    tf.scalar(this._gamma).mul(
+                        qTargValue.sub(tf.scalar(this._alpha).mul(logProb))
                     )
                 )
                         
-            assertShape(nextFreshAction, [this.batchSize, this.nActions], "nextFreshAction")
-            assertShape(logProb, [this.batchSize, 1], "logProb")
-            assertShape(qTargValue, [this.batchSize, 1], "qTargValue")
-            assertShape(target, [this.batchSize, 1], "target")
+            assertShape(nextFreshAction, [this._batchSize, this._nActions], 'nextFreshAction')
+            assertShape(logProb, [this._batchSize, 1], 'logProb')
+            assertShape(qTargValue, [this._batchSize, 1], 'qTargValue')
+            assertShape(target, [this._batchSize, 1], 'target')
 
             return (q) => {
                 return () => {
-                    const qValue = q.predict([state, action], {batchSize: this.batchSize})
+                    const qValue = q.predict([state, action], {batchSize: this._batchSize})
                     
                     const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
                     
-                    assertShape(qValue, [this.batchSize, 1], "qValue")
+                    assertShape(qValue, [this._batchSize, 1], 'qValue')
 
                     return loss
                 }
@@ -111,34 +120,28 @@ console.time("= QLearn timer")
         })()
 
         for (const [q, optimizer] of [[this.q1, this.q1Optimizer], [this.q2, this.q2Optimizer]]) {
-console.time(q.name + " Learn timer")
             const qLossFunction = getQLossFunction(q)
+
             const {value, grads} = tf.variableGrads(qLossFunction, q.getWeights(true)) // true means trainableOnly
+
             optimizer.applyGradients(grads)
-console.timeEnd(q.name + " Learn timer")
-console.log(q.name + " Loss: " + value)
         }
-
-
-console.timeEnd("= QLearn timer")
-
-console.time("= ALearn timer")
 
         // TODO: consider delayed update of policy and targets (if possible)
         const actorLossFunction = () => {
             const [freshAction, logProb] = this.sampleAction(state)
             
-            const q1Value = this.q1.predict([state, freshAction], {batchSize: this.batchSize})
-            const q2Value = this.q2.predict([state, freshAction], {batchSize: this.batchSize})
+            const q1Value = this.q1.predict([state, freshAction], {batchSize: this._batchSize})
+            const q2Value = this.q2.predict([state, freshAction], {batchSize: this._batchSize})
             
             const criticValue = tf.minimum(q1Value, q2Value)
             
-            const loss = tf.mean(tf.scalar(this.alpha).mul(logProb).sub(criticValue))
+            const loss = tf.mean(tf.scalar(this._alpha).mul(logProb).sub(criticValue))
             
-            assertShape(freshAction, [this.batchSize, this.nActions], "freshAction")
-            assertShape(logProb, [this.batchSize, 1], "logProb")
-            assertShape(q1Value, [this.batchSize, 1], "q1Value")
-            assertShape(criticValue, [this.batchSize, 1], "criticValue")
+            assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
+            assertShape(logProb, [this._batchSize, 1], 'logProb')
+            assertShape(q1Value, [this._batchSize, 1], 'q1Value')
+            assertShape(criticValue, [this._batchSize, 1], 'criticValue')
 
             return loss
         }
@@ -146,29 +149,28 @@ console.time("= ALearn timer")
         const {value, grads} = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
         this.actorOptimizer.applyGradients(grads)
         
-        console.log("Actor Loss: " + value)
-
-console.timeEnd("= ALearn timer") 
+        console.log('Actor Loss: ' + value)
 
         this.updateTargets()
-
     }
 
     /**
      * Soft update target Q-networks.
      * 
-     * @param {number} [tau = this.tau] - interpolation factor in polyak averaging: `wTarg <- wTarg*(1-tau) + w*tau`
+     * @param {number} [tau = this._tau] - interpolation factor in polyak averaging: `wTarg <- wTarg*(1-tau) + w*tau`
      */
-    updateTargets(tau = this.tau) {
+    updateTargets(tau = this._tau) {
         tau = tf.scalar(tau)
 
-        const q1W = this.q1.getWeights(),
+        const
+            q1W = this.q1.getWeights(),
             q2W = this.q2.getWeights(),
             q1WTarg = this.q1Targ.getWeights(),
             q2WTarg = this.q2Targ.getWeights(),
             len = q1W.length
 
         const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
+
         const w1 = [], w2 = []
         for (let i = 0; i < len; i++) {
             w1.push(calc(q1W[i], q1WTarg[i]))
@@ -186,8 +188,8 @@ console.timeEnd("= ALearn timer")
      * @returns {Tensor[]} action and log policy
      */
     sampleAction(state) {
-        let [mu, sigma] = this.actor.predict(state, {batchSize: this.batchSize})
-        sigma = tf.clipByValue(sigma, this.epsilon, 1) // do we need to clip sigma??? 
+        let [mu, sigma] = this.actor.predict(state, {batchSize: this._batchSize})
+        sigma = tf.clipByValue(sigma, this._epsilon, 1) // do we need to clip sigma??? 
         // TODO: output log(std) instead of std
         // assert LOG_SIG_MIN <= self.log_std <= LOG_SIG_MAX https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
   
@@ -205,7 +207,7 @@ console.timeEnd("= ALearn timer")
           tf.log(
             tf.scalar(1)
               .sub(action.pow(tf.scalar(2).toInt()))
-              .add(this.epsilon)
+              .add(this._epsilon)
           )
         ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
 
@@ -234,22 +236,24 @@ console.timeEnd("= ALearn timer")
      * Builds actor network model.
      * 
      * @param {string} [name = 'actor'] - name of the model
+     * @param {string} trainable - whether a critic is trainable
      * @returns {tf.LayersModel} model
      */
-    _getActor(name = 'actor') {
+    _getActor(name = 'actor', trainable = true) {
         let outputs = this._getConvEncoder(this._frameInput)
         outputs = tf.layers.flatten().apply(outputs)
-        outputs = tf.layers.dense({units: 128, activation: "relu"}).apply(outputs)
-        outputs = tf.layers.dense({units: 64 , activation: "relu"}).apply(outputs)
+        outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
+        outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
 
-        const mu =    tf.layers.dense({units: this.nActions}).apply(outputs)
-        const sigma = tf.layers.dense({units: this.nActions}).apply(outputs)
+        const mu =    tf.layers.dense({units: this._nActions}).apply(outputs)
+        const sigma = tf.layers.dense({units: this._nActions}).apply(outputs)
 
         const model = tf.model({inputs: this._frameInput, outputs: [mu, sigma], name})
+        model.trainable = trainable
 
-        console.log("==========================")
-        console.log("==========================")
-        console.log("Actor " + name + ": ")
+        console.log('==========================')
+        console.log('==========================')
+        console.log('Actor ' + name + ': ')
 
         model.summary()
 
@@ -269,17 +273,17 @@ console.timeEnd("= ALearn timer")
 
         const concatOutput = tf.layers.concatenate().apply([convOutputs, this._actionInput])
 
-        let outputs = tf.layers.dense({units: 128, activation: "relu"}).apply(concatOutput)
-        outputs = tf.layers.dense({units: 64 , activation: "relu"}).apply(outputs)
+        let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
+        outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
 
         outputs = tf.layers.dense({units: 1}).apply(outputs)
 
         const model = tf.model({inputs: [this._frameInput, this._actionInput], outputs, name})
         model.trainable = trainable
 
-        console.log("==========================")
-        console.log("==========================")
-        console.log("CRITIC " + name + ": ")
+        console.log('==========================')
+        console.log('==========================')
+        console.log('CRITIC ' + name + ': ')
 
         model.summary()
 
