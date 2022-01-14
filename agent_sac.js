@@ -29,7 +29,7 @@ class AgentSac {
         rewardScale = 2,
         trainable = true, // Whether the actor is trainable
         verbose = false
-    }) {
+    } = {}) {
         this._batchSize = batchSize
         this._frameShape = frameShape 
         this._nFrames = nFrames

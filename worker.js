@@ -12,7 +12,8 @@ const outputUnits = 1
 const inputs = tf.input({batchShape : [batchSize, ...shape.slice(0, 2), shape[2]*stackFrames]})
 let outputs = inputs
 
-const agent = new AgentSac({})
+const agent = new AgentSac()
+const rb = new ReplyBuffer(50)
 
 const SAME = FALSE
 let busy = TRUE
@@ -22,6 +23,18 @@ let stack = []
 let stack2 = []
 
 self.addEventListener('message', async e => {
+    switch (e.data.action) {
+        case 'newTransition':
+            i++
+            rb.add(e.data.transition)
+            break
+        default:
+            console.warn('Unknown action')
+            break
+    }
+
+    return
+
     if (busy || i > 50) return
     busy = TRUE
     i++

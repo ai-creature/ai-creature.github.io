@@ -230,7 +230,7 @@
             let busy = false
             let frameStack = []
             let transitions = []
-            let index = -1
+            let stateId = 0
 
             const N_FRAMES = 4
             const TRANSITIONS_BUFFER_SIZE = 2
@@ -256,9 +256,6 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
 // console.timeEnd(timerLbl)
 
 
-
-                index++
-                
                 const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, { // ~ 7-60ms
                     width: 256, 
                     height: 128
@@ -277,7 +274,7 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     const action = agent.sampleAction(batchState)
 
                     transitions.push({
-                        index, 
+                        id: stateId++, 
                         state: frameStack, //await state.array(), // 20ms vs 50ms || size 200kb vs 1.5mb
                         action: await action.array(), 
                         reward: 0
@@ -289,7 +286,7 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
 
                         const transition = transitions.shift()
 
-                        worker.postMessage(transition) // timer ~ 6ms
+                        worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
                     }
 
                     tensors.forEach(t => t.dispose())

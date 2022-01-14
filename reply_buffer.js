@@ -17,9 +17,7 @@
  * Reply Buffer.
  */
 class ReplyBuffer {
-    constructor({
-        size = 500, // number of stored transitions
-    }) {
+    constructor(size = 500) {
         this._size = size
         
         this._buffer = new Array(size).fill()
@@ -28,11 +26,17 @@ class ReplyBuffer {
         this.length = 0
     }
 
+    /**
+     * Add a new transition to the reply buffer. 
+     * Transition doesn't contain the next state. The next state is derived when sampling.
+     * 
+     * @param {{id: number, priority: number, state, action, reward: number}} transition transition
+     */
     add(transition) {
         let {id, priority = 1} = transition
 
-        if (priority < 1) 
-            throw new Error('Priority less than 1')
+        if (id === undefined || id < 0 || priority < 1) 
+            throw new Error('Invalid arguments')
 
         const index = id % this._size
 
@@ -47,7 +51,14 @@ class ReplyBuffer {
         this._buffer[index] = transition
     }
 
-    sample(n) {
+    /**
+     * Return `n` random samples from the buffer. 
+     * Returns an empty array if impossible provide required number of samples.
+     * 
+     * @param {number} [n = 1] - number of samples 
+     * @returns array of exactly `n` samples
+     */
+    sample(n = 1) {
         if (this.length < n) 
             return []
 
@@ -55,7 +66,8 @@ class ReplyBuffer {
             sampleIndices = new Set(),
             samples = []
 
-        while (n--)
+        let counter = n
+        while (counter--)
             while (sampleIndices.size < this.length) {
                 const randomIndex = this._pool[getRandomInt(0, this._pool.length - 1)]
                 if (sampleIndices.has(randomIndex))
@@ -68,7 +80,7 @@ class ReplyBuffer {
                 const next = this._buffer[nextId % this._size]
 
                 if (next && next.id === nextId) {
-                    samples.push({ id, nextId: next.id, state, action, reward, nextState: next.state})
+                    samples.push({ state, action, reward, nextState: next.state})
                     break
                 }
             }
@@ -79,23 +91,25 @@ class ReplyBuffer {
 
 /** TESTS */
 (() => {
-    const rb = new ReplyBuffer({size: 5})
-    rb.add({id: 0})
-    rb.add({id: 1})
-    rb.add({id: 2, priority: 3})
+    return
+    
+    const rb = new ReplyBuffer(5)
+    rb.add({id: 0, state: 0})
+    rb.add({id: 1, state: 1})
+    rb.add({id: 2, state: 2, priority: 3})
     
     console.assert(rb.length === 3)
     console.assert(rb._pool.length === 5)
     console.assert(rb._buffer[0].id === 0)
     
-    rb.add({id: 2})
+    rb.add({id: 2, state: 2})
     rb.add({id: 4, state: 4, priority: 2})
     
     console.assert(rb.length === 4)
     console.assert(rb._pool.length === 5)
     console.assert(JSON.stringify(rb._pool) === '[0,1,2,4,4]')
     
-    rb.add({id: 5, priority: 2})
+    rb.add({id: 5, state: 0, priority: 2}) // 5%5 = 0 => state = 0
     
     console.assert(rb.length === 4)
     console.assert(rb._pool.length === 6)
@@ -105,14 +119,16 @@ class ReplyBuffer {
 
     console.assert(rb.sample(999).length === 0, 'Too many samples')
     
-    console.log(rb._buffer)
-    console.assert(rb.sample(2).length === 2, 'Only two samples possible')
+    let samples1 = rb.sample(2)
+    console.assert(samples1.length === 2, 'Only two samples possible')
+    console.assert(samples1[0].nextState === (samples1[0].state + 1) % 5, 'Next state should be valid', samples1)
 
-    rb.add({id: 506, priority: 3})
+    rb.add({id: 506, state: 506, priority: 3})
 
-    const samples = rb.sample(1)
-    console.assert(samples.length === 1, 'Only one suitable sample with valid next state')
-    console.assert(samples[0].state === 4, 'Sample with id:4')
+    let samples2 = rb.sample(1)
+    console.assert(samples2.length === 1, 'Only one suitable sample with valid next state')
+    console.assert(samples2[0].state === 4, 'Sample with id:4')
+    console.assert(rb._buffer[1].id === 506, '506 % 5 = 1')
 
     console.assert(rb.sample(2).length === 0, 
         'Can not sample 2 transitions since next state is available only for one state')
