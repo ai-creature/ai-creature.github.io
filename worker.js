@@ -14,7 +14,7 @@ let outputs = inputs
 const agent = new AgentSac({})
 
 const SAME = FALSE
-let busy = FALSE
+let busy = TRUE
 let i = 0
 let prevIsBlack = FALSE
 let stack = []
@@ -38,11 +38,11 @@ self.addEventListener('message', async e => {
 
     const input = tf.stack([tf.concat(stack, 2)])
 
-    console.time("learn timer")
-    tf.tidy(()=>{
-        agent.learn(input)
-    })
-    console.timeEnd("learn timer")
+    // console.time("learn timer")
+    // tf.tidy(()=>{
+    //     agent.learn(input)
+    // })
+    // console.timeEnd("learn timer")
 
 
     // const [action, logProb] = agent.sampleAction(input)
@@ -80,8 +80,10 @@ self.addEventListener('message', async e => {
     stack2 = []
 
     // if (i%24 < 5) {
+        console.time("send weights")
+        self.postMessage({frame: data, weights: agent.actor.getWeights().map(w => w.arraySync())}) // timer ~10ms for send Weights
 
-        self.postMessage(data)
+        console.timeEnd("send weights")
     // }
 
     busy = FALSE

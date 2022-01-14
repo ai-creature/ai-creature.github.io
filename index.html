@@ -22,6 +22,8 @@
 
         <!-- tf.js -->
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js"></script>
+
+        <script src="agent_sac.js"></script>
         
         <style>
             html, body {
@@ -50,6 +52,7 @@
     <canvas id="renderCanvas"></canvas>
     <canvas id="testCanvas"></canvas>
     <script>
+        const agent = new AgentSac({trainable: false, verbose: true})
         
         var canvas = document.getElementById("renderCanvas");
 
@@ -170,7 +173,6 @@
                 })
             })()
 
-
             /* CAGE */
             const cage = BABYLON.MeshBuilder.CreateBox("cage", {
                 width: 35, 
@@ -188,59 +190,121 @@
 
 
             /* CREATURE's CAMERA */
-            const proj = BABYLON.MeshBuilder.CreateBox("proj", {
+            const mirror = BABYLON.MeshBuilder.CreateBox("mirror", {
                 width: 20, 
                 depth: 0.1, 
                 height: 10
             }, scene)
-            proj.material = new BABYLON.StandardMaterial("proj_mat", scene)
-            proj.position = new BABYLON.Vector3(20, 0, 0)
-            // proj.addRotation(0, Math.PI/2, 0)
-            proj.isVisible = true
+            mirror.material = new BABYLON.StandardMaterial("mirror_mat", scene)
+            mirror.position = new BABYLON.Vector3(20, 0, 0)
+            // mirror.addRotation(0, Math.PI/2, 0)
+            mirror.isVisible = true
 
             var crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(1, 0, 0), scene)
             crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
             crCamera.parent = creature;
 
 
-            const worker = new Worker("worker.js",)
+            const worker = new Worker('worker.js')
+
             worker.addEventListener('message', e => {
-                tf.browser.toPixels(e.data, document.getElementById("testCanvas"))
+                const {frame, weights} = e.data
+                
+                tf.tidy(() => {
+                    if (frame)
+                        tf.browser.toPixels(frame, document.getElementById("testCanvas")) // timer ~4ms
+
+                    if (weights)
+                        agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
+                })
             })
 
+            const base64ToImg = (base64) => new Promise((res, _) => {
+                const img = new Image()
+                img.src = base64
+                img.onload = () => res(img)
+            })
 
-            let frameEvery = 50
+            let frameEvery = 1000/24 // ~41ms ~24frames/sec
             let start = Date.now() + frameEvery
-            let fl = true
+            let busy = false
+            let frameStack = []
+            let transitions = []
+            let index = -1
 
-            scene.registerBeforeRender(async () => {
-                if (Date.now() < start) return
+            const N_FRAMES = 4
+            const TRANSITIONS_BUFFER_SIZE = 2
+            const REPLAY_BUFFER_SIZE = 500 // TODO: sync params with workers (for the agent the same)
+
+            scene.registerBeforeRender(async () => { // timer ~ 20-90ms
+                if (Date.now() < start || busy) return
                 start = Date.now() + frameEvery
-// if (!fl) return
-// fl = false
-                const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, {
+                busy = true
+                const timerLbl = 'TimerLabel-' + start 
+                /*
+                    console.time(timerLbl)
+                    console.timeEnd(timerLbl)
+                    console.log('numTensors BEFORE: ' + tf.memory().numTensors)
+                    console.log('numTensors AFTER: ' + tf.memory().numTensors)
+                */
+
+                index = (index + 1) % REPLAY_BUFFER_SIZE
+                
+                const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, { // ~ 7-60ms
                     width: 256, 
                     height: 128
                 })
 
-                proj.material.diffuseTexture = new BABYLON.Texture(base64Data, scene)
+                frameStack.push(base64Data)
 
-                function base64ToImg(base64) {
-                    return new Promise((resolve, _) => {
-                        const img = new Image()
-                        img.src = base64
-                        img.onload = () => resolve(img)
-                    });
+                if (frameStack.length >= N_FRAMES) { // ~20ms
+                    if (frameStack.length > N_FRAMES) 
+                        throw new Error("(⊙＿⊙')")
+
+                    const imgs = await Promise.all(frameStack.map(base64Data => base64ToImg(base64Data)))
+                    const tensors = imgs.map(img => tf.browser.fromPixels(img))
+                    const state = tf.concat(tensors, 2)
+                    const batchState = tf.stack([state])
+                    const action = agent.sampleAction(batchState)
+
+                    transitions.push({
+                        index, 
+                        state: frameStack, //await state.array(), // 20ms vs 50ms || size 200kb vs 1.5mb
+                        action: await action.array(), 
+                        reward: 0
+                    })
+
+                    if (transitions.length >= TRANSITIONS_BUFFER_SIZE) {
+                        if (transitions.length > TRANSITIONS_BUFFER_SIZE) 
+                            throw new Error("(⊙＿⊙')")
+
+                        const transition = transitions.shift()
+
+                        worker.postMessage(transition) // timer ~ 6ms
+                    }
+
+                    tensors.forEach(t => t.dispose())
+                    state.dispose()
+                    action.dispose()
+                    batchState.dispose()
+
+                    frameStack = []
                 }
-                const img = await base64ToImg(base64Data)
-                const tensor = tf.browser.fromPixels(img)
-
-                worker.postMessage(await tensor.array())
-                tensor.dispose()
+                
+                mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
+                
+                // const img = await base64ToImg(base64Data) // timer ~2-12ms
+                // const tensor = tf.browser.fromPixels(img) // timer ~ 1ms
+                // const arr = await tensor.array() // timer ~ 6-15ms
+                // worker.postMessage(arr) // timer ~ 6ms
+                // tensor.dispose()
+                
+                busy = false
             })
 
-            return scene;
+            return scene
         };
+
         window.initFunction = async function() {
             await Ammo();
             

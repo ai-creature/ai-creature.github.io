@@ -19,7 +19,7 @@ class AgentSac {
     constructor({
         batchSize = 1, 
         frameShape = [128, 256, 3], 
-        nFrames = 1, // Number of stacked frames per state
+        nFrames = 4, // Number of stacked frames per state
         nActions = 9, // 3 impulses by axis, 3 rotations, rgb color
         nTelemetry = 6, // 3 angular speeds and 3 speeds by axis
         epsilon = 1e-6, // Small number
@@ -27,7 +27,8 @@ class AgentSac {
         gamma = 0.99, // Discount factor (γ)
         tau = 5e-3, // Target smoothing coefficient (τ)
         rewardScale = 2,
-        trainable = true // Whether the actor is trainable
+        trainable = true, // Whether the actor is trainable
+        verbose = false
     }) {
         this._batchSize = batchSize
         this._frameShape = frameShape 
@@ -40,6 +41,7 @@ class AgentSac {
         this._tau = tau
         this._rewardScale = rewardScale
         this._trainable = trainable
+        this._verbose = verbose
 
         this._frameInput = tf.input({batchShape : [null, ...frameShape.slice(0, 2), frameShape[2] * nFrames]})
         this._telemetryInput = tf.input({batchShape : [null, nTelemetry]})
@@ -86,7 +88,7 @@ class AgentSac {
         assertShape(nextState, state.shape, 'nextState')
 
         const getQLossFunction = (() => {
-            const [nextFreshAction, logProb] = this.sampleAction(nextState)
+            const [nextFreshAction, logProb] = this.sampleAction(nextState, true)
             
             const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
             const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
@@ -129,7 +131,7 @@ class AgentSac {
 
         // TODO: consider delayed update of policy and targets (if possible)
         const actorLossFunction = () => {
-            const [freshAction, logProb] = this.sampleAction(state)
+            const [freshAction, logProb] = this.sampleAction(state, true)
             
             const q1Value = this.q1.predict([state, freshAction], {batchSize: this._batchSize})
             const q2Value = this.q2.predict([state, freshAction], {batchSize: this._batchSize})
@@ -137,20 +139,20 @@ class AgentSac {
             const criticValue = tf.minimum(q1Value, q2Value)
             
             const loss = tf.mean(tf.scalar(this._alpha).mul(logProb).sub(criticValue))
-            
             assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
             assertShape(logProb, [this._batchSize, 1], 'logProb')
             assertShape(q1Value, [this._batchSize, 1], 'q1Value')
             assertShape(criticValue, [this._batchSize, 1], 'criticValue')
-
+            
             return loss
         }
-
+        
         const {value, grads} = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
+        
         this.actorOptimizer.applyGradients(grads)
         
-        console.log('Actor Loss: ' + value)
-
+        if (this._verbose) console.log('Actor Loss: ' + value)
+        
         this.updateTargets()
     }
 
@@ -168,15 +170,15 @@ class AgentSac {
             q1WTarg = this.q1Targ.getWeights(),
             q2WTarg = this.q2Targ.getWeights(),
             len = q1W.length
-
+        
         const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
-
+        
         const w1 = [], w2 = []
         for (let i = 0; i < len; i++) {
             w1.push(calc(q1W[i], q1WTarg[i]))
             w2.push(calc(q2W[i], q2WTarg[i]))
         }
-
+        
         this.q1Targ.setWeights(w1)
         this.q2Targ.setWeights(w2)
     }
@@ -185,33 +187,39 @@ class AgentSac {
      * Returns actions sampled from normal distribution using means and sigmas predicted by the actor.
      * 
      * @param {Tensor} state - state
-     * @returns {Tensor[]} action and log policy
+     * @param {Tensor} [withLogProbs = false] - whether return log probabilities
+     * @returns {Tensor || Tensor[]} action and log policy
      */
-    sampleAction(state) {
-        let [mu, sigma] = this.actor.predict(state, {batchSize: this._batchSize})
-        sigma = tf.clipByValue(sigma, this._epsilon, 1) // do we need to clip sigma??? 
-        // TODO: output log(std) instead of std
-        // assert LOG_SIG_MIN <= self.log_std <= LOG_SIG_MAX https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
-  
-        // sample epsilon N(mu = 0, sigma = 1)
-        const epsilon = tf.randomNormal(mu.shape.slice(0, 2), 0, 1.0)
-
-        // reparameterization trick: z = mu + sigma * epsilon
-        const reparamSample = mu.add(sigma.mul(epsilon))
-
-        const action = tf.tanh(reparamSample) // * 1 max_action is 1?
-        const logProb = this._logProb(reparamSample, mu, sigma)
-  
-        // Enforcing Action Bound
-        const logProbBounded = logProb.sub(
-          tf.log(
-            tf.scalar(1)
-              .sub(action.pow(tf.scalar(2).toInt()))
-              .add(this._epsilon)
-          )
-        ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
-
-        return [action, logProbBounded]
+    sampleAction(state, withLogProbs = false) { // timer ~3ms
+        return tf.tidy(() => {
+            let [mu, sigma] = this.actor.predict(state, {batchSize: this._batchSize})
+            sigma = tf.clipByValue(sigma, this._epsilon, 1) // do we need to clip sigma??? 
+            // TODO: output log(std) instead of std
+            // assert LOG_SIG_MIN <= self.log_std <= LOG_SIG_MAX https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
+      
+            // sample epsilon N(mu = 0, sigma = 1)
+            const epsilon = tf.randomNormal(mu.shape.slice(0, 2), 0, 1.0)
+    
+            // reparameterization trick: z = mu + sigma * epsilon
+            const reparamSample = mu.add(sigma.mul(epsilon))
+    
+            const action = tf.tanh(reparamSample) // * 1 max_action is 1?
+    
+            if (!withLogProbs) return action
+    
+            const logProb = this._logProb(reparamSample, mu, sigma)
+      
+            // Enforcing Action Bound
+            const logProbBounded = logProb.sub(
+              tf.log(
+                tf.scalar(1)
+                  .sub(action.pow(tf.scalar(2).toInt()))
+                  .add(this._epsilon)
+              )
+            ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
+    
+            return [action, logProbBounded]
+        })
     }
 
     /**
@@ -251,11 +259,13 @@ class AgentSac {
         const model = tf.model({inputs: this._frameInput, outputs: [mu, sigma], name})
         model.trainable = trainable
 
-        console.log('==========================')
-        console.log('==========================')
-        console.log('Actor ' + name + ': ')
+        if (this._verbose) {
+            console.log('==========================')
+            console.log('==========================')
+            console.log('Actor ' + name + ': ')
 
-        model.summary()
+            model.summary()
+        }
 
         return model
     }
@@ -281,11 +291,13 @@ class AgentSac {
         const model = tf.model({inputs: [this._frameInput, this._actionInput], outputs, name})
         model.trainable = trainable
 
-        console.log('==========================')
-        console.log('==========================')
-        console.log('CRITIC ' + name + ': ')
-
-        model.summary()
+        if (this._verbose) {
+            console.log('==========================')
+            console.log('==========================')
+            console.log('CRITIC ' + name + ': ')
+    
+            model.summary()
+        }
 
         return model
     }
