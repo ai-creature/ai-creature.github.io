@@ -52,7 +52,7 @@
     <canvas id="renderCanvas"></canvas>
     <canvas id="testCanvas"></canvas>
     <script>
-        const agent = new AgentSac({trainable: false, verbose: true})
+        const agent = new AgentSac({trainable: false, verbose: false})
         
         var canvas = document.getElementById("renderCanvas");
 
@@ -234,7 +234,6 @@
 
             const N_FRAMES = 4
             const TRANSITIONS_BUFFER_SIZE = 2
-            const REPLAY_BUFFER_SIZE = 500 // TODO: sync params with workers (for the agent the same)
 
             scene.registerBeforeRender(async () => { // timer ~ 20-90ms
                 if (Date.now() < start || busy) return
@@ -242,13 +241,23 @@
                 busy = true
                 const timerLbl = 'TimerLabel-' + start 
                 /*
-                    console.time(timerLbl)
-                    console.timeEnd(timerLbl)
-                    console.log('numTensors BEFORE: ' + tf.memory().numTensors)
-                    console.log('numTensors AFTER: ' + tf.memory().numTensors)
+console.time(timerLbl)
+console.timeEnd(timerLbl)
+console.log('numTensors BEFORE: ' + tf.memory().numTensors)
+console.log('numTensors AFTER: ' + tf.memory().numTensors)
                 */
 
-                index = (index + 1) % REPLAY_BUFFER_SIZE
+                let ar = new Array(100000).fill(1)
+
+// console.time(timerLbl)
+//                 while (ar.length) {
+//                     ar = ar.filter(el => el == 0)
+//                 }
+// console.timeEnd(timerLbl)
+
+
+
+                index++
                 
                 const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, { // ~ 7-60ms
                     width: 256, 

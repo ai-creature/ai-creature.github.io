@@ -1,5 +1,6 @@
 importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.js")
 importScripts("agent_sac.js")
+importScripts("reply_buffer.js")
 
 const [TRUE, FALSE] = [true, false]
 

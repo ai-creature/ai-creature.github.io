@@ -6,7 +6,7 @@
  * @param {string} [msg = ''] - message for the error
  */
 const assertShape = (tensor, shape, msg = '') => {
-    tf.util.assert(
+    console.assert(
         JSON.stringify(tensor.shape) === JSON.stringify(shape),
         msg + ' shape ' + tensor.shape + ' is not ' + shape)
 }
