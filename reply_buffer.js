@@ -34,7 +34,6 @@ class ReplyBuffer {
      */
     add(transition) {
         let {id, priority = 1} = transition
-
         if (id === undefined || id < 0 || priority < 1) 
             throw new Error('Invalid arguments')
 
@@ -92,7 +91,7 @@ class ReplyBuffer {
 /** TESTS */
 (() => {
     return
-    
+
     const rb = new ReplyBuffer(5)
     rb.add({id: 0, state: 0})
     rb.add({id: 1, state: 1})

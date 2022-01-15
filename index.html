@@ -260,6 +260,7 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     width: 256, 
                     height: 128
                 })
+                const scalar255 = tf.scalar(255)
 
                 frameStack.push(base64Data)
 
@@ -269,30 +270,30 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
 
                     const imgs = await Promise.all(frameStack.map(base64Data => base64ToImg(base64Data)))
                     const tensors = imgs.map(img => tf.browser.fromPixels(img))
-                    const state = tf.concat(tensors, 2)
+                    const state = tf.concat(tensors, 2).div(scalar255) // TODO: need to dispose?
                     const batchState = tf.stack([state])
                     const action = agent.sampleAction(batchState)
+                    const [stateArr, actionArr] = await Promise.all([state.array(), action.array()])
 
                     transitions.push({
                         id: stateId++, 
-                        state: frameStack, //await state.array(), // 20ms vs 50ms || size 200kb vs 1.5mb
-                        action: await action.array(), 
+                        state: stateArr, // 20ms vs 50ms || size 200kb vs 1.5mb
+                        action: actionArr[0], // action come as a batch of size 1
                         reward: 0
                     })
 
                     if (transitions.length >= TRANSITIONS_BUFFER_SIZE) {
-                        if (transitions.length > TRANSITIONS_BUFFER_SIZE) 
+                        if (transitions.length > TRANSITIONS_BUFFER_SIZE)
                             throw new Error("(⊙＿⊙')")
 
                         const transition = transitions.shift()
-
                         worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
                     }
 
                     tensors.forEach(t => t.dispose())
                     state.dispose()
-                    action.dispose()
                     batchState.dispose()
+                    action.dispose()
 
                     frameStack = []
                 }

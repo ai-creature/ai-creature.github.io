@@ -4,16 +4,9 @@ importScripts("reply_buffer.js")
 
 const [TRUE, FALSE] = [true, false]
 
-const shape = [128, 256, 3]
-const stackFrames = 1
-const batchSize = 1
-const outputUnits = 1
+const agent = new AgentSac({batchSize: 7})
 
-const inputs = tf.input({batchShape : [batchSize, ...shape.slice(0, 2), shape[2]*stackFrames]})
-let outputs = inputs
-
-const agent = new AgentSac()
-const rb = new ReplyBuffer(50)
+const rb = new ReplyBuffer(100)
 
 const SAME = FALSE
 let busy = TRUE
@@ -22,11 +15,64 @@ let prevIsBlack = FALSE
 let stack = []
 let stack2 = []
 
+const job = async () => {
+    const samples = rb.sample(agent._batchSize)
+    if (!samples.length) return
+
+    const 
+        states = [],
+        actions = [],
+        rewards = [],
+        nextStates = []
+
+    for (const { state, action, reward, nextState } of samples) {
+        console.log(reward.shape)
+        states.push(state)
+        actions.push(action)
+        rewards.push(reward)
+        nextStates.push(nextState)
+    }
+
+    tf.tidy(() => {
+        
+        agent.learn({
+            state: tf.stack(states), 
+            action: tf.stack(actions), 
+            reward: tf.stack(rewards), 
+            nextState: tf.stack(nextStates)
+        })
+    })
+}
+
+const tick = async () => {
+    try {
+        await job()
+        setTimeout(tick, 0)
+    } catch (e) {
+        console.error(e)
+        setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
+    }
+}
+setTimeout(tick, 0)
+
+const decodeTransition = transition => {
+    let { id, state, action, reward } = transition
+
+    return tf.tidy(() => {
+        // TODO: figure out which type is better 'float32' for tf.tensor
+        // TODO: make sexy getters for shapes
+        state = tf.tensor3d(state, [...agent._frameShape.slice(0, 2), agent._frameShape[2] * agent._nFrames])
+        action = tf.tensor1d(action)
+        reward = tf.scalar(reward)
+
+        return { id, state, action, reward }
+    })
+}
+
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
-            i++
-            rb.add(e.data.transition)
+            rb.add(decodeTransition(e.data.transition))
             break
         default:
             console.warn('Unknown action')
@@ -102,4 +148,6 @@ self.addEventListener('message', async e => {
 
     busy = FALSE
 })
+
+
 

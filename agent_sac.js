@@ -69,91 +69,92 @@ class AgentSac {
     /**
      * Trains networks on a batch from the replay buffer.
      * 
-     * @param {*} st 
+     * @param {{state, action, reward, nextState}} - trnsitions in batch
+     * @returns {void} nothing
      */
-    learn(st) {
-        if (!this._trainable) {
+    learn({state, action, reward, nextState}) {
+        if (!this._trainable)
             throw new Error('Actor is not trainable')
-        }
 
-        const 
-            state = st,
-            action = tf.ones([this._batchSize, this._nActions]),
-            reward = tf.ones([this._batchSize, 1]),
-            nextState = tf.onesLike(state)
-
-        assertShape(state, [this._batchSize, ...this._frameShape], 'state')
-        assertShape(action, [this._batchSize, this._nActions], 'action')
-        assertShape(reward, [this._batchSize, 1], 'reward')
-        assertShape(nextState, state.shape, 'nextState')
-
-        const getQLossFunction = (() => {
-            const [nextFreshAction, logProb] = this.sampleAction(nextState, true)
-            
-            const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
-            const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
-            
-            const qTargValue = tf.minimum(q1TargValue, q2TargValue)
-
-            // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
-            const target = reward.mul(tf.scalar(this._rewardScale))
-                .add(
-                    tf.scalar(this._gamma).mul(
-                        qTargValue.sub(tf.scalar(this._alpha).mul(logProb))
+        return tf.tidy(() => {
+            // const 
+            //     state = st,
+            //     action = tf.ones([this._batchSize, this._nActions]),
+            //     reward = tf.ones([this._batchSize, 1]),
+            //     nextState = tf.onesLike(state)
+            assertShape(state, [this._batchSize, ...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames], 'state')
+            assertShape(action, [this._batchSize, this._nActions], 'action')
+            assertShape(reward, [this._batchSize, 1], 'reward')
+            assertShape(nextState, state.shape, 'nextState')
+    
+            const getQLossFunction = (() => {
+                const [nextFreshAction, logProb] = this.sampleAction(nextState, true)
+                
+                const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
+                const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
+                
+                const qTargValue = tf.minimum(q1TargValue, q2TargValue)
+    
+                // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
+                const target = reward.mul(tf.scalar(this._rewardScale))
+                    .add(
+                        tf.scalar(this._gamma).mul(
+                            qTargValue.sub(tf.scalar(this._alpha).mul(logProb))
+                        )
                     )
-                )
+                            
+                assertShape(nextFreshAction, [this._batchSize, this._nActions], 'nextFreshAction')
+                assertShape(logProb, [this._batchSize, 1], 'logProb')
+                assertShape(qTargValue, [this._batchSize, 1], 'qTargValue')
+                assertShape(target, [this._batchSize, 1], 'target')
+    
+                return (q) => {
+                    return () => {
+                        const qValue = q.predict([state, action], {batchSize: this._batchSize})
                         
-            assertShape(nextFreshAction, [this._batchSize, this._nActions], 'nextFreshAction')
-            assertShape(logProb, [this._batchSize, 1], 'logProb')
-            assertShape(qTargValue, [this._batchSize, 1], 'qTargValue')
-            assertShape(target, [this._batchSize, 1], 'target')
-
-            return (q) => {
-                return () => {
-                    const qValue = q.predict([state, action], {batchSize: this._batchSize})
-                    
-                    const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
-                    
-                    assertShape(qValue, [this._batchSize, 1], 'qValue')
-
-                    return loss
+                        const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
+                        
+                        assertShape(qValue, [this._batchSize, 1], 'qValue')
+    
+                        return loss
+                    }
                 }
+            })()
+    
+            for (const [q, optimizer] of [[this.q1, this.q1Optimizer], [this.q2, this.q2Optimizer]]) {
+                const qLossFunction = getQLossFunction(q)
+    
+                const {value, grads} = tf.variableGrads(qLossFunction, q.getWeights(true)) // true means trainableOnly
+    
+                optimizer.applyGradients(grads)
             }
-        })()
-
-        for (const [q, optimizer] of [[this.q1, this.q1Optimizer], [this.q2, this.q2Optimizer]]) {
-            const qLossFunction = getQLossFunction(q)
-
-            const {value, grads} = tf.variableGrads(qLossFunction, q.getWeights(true)) // true means trainableOnly
-
-            optimizer.applyGradients(grads)
-        }
-
-        // TODO: consider delayed update of policy and targets (if possible)
-        const actorLossFunction = () => {
-            const [freshAction, logProb] = this.sampleAction(state, true)
+    
+            // TODO: consider delayed update of policy and targets (if possible)
+            const actorLossFunction = () => {
+                const [freshAction, logProb] = this.sampleAction(state, true)
+                
+                const q1Value = this.q1.predict([state, freshAction], {batchSize: this._batchSize})
+                const q2Value = this.q2.predict([state, freshAction], {batchSize: this._batchSize})
+                
+                const criticValue = tf.minimum(q1Value, q2Value)
+                
+                const loss = tf.mean(tf.scalar(this._alpha).mul(logProb).sub(criticValue))
+                assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
+                assertShape(logProb, [this._batchSize, 1], 'logProb')
+                assertShape(q1Value, [this._batchSize, 1], 'q1Value')
+                assertShape(criticValue, [this._batchSize, 1], 'criticValue')
+                
+                return loss
+            }
             
-            const q1Value = this.q1.predict([state, freshAction], {batchSize: this._batchSize})
-            const q2Value = this.q2.predict([state, freshAction], {batchSize: this._batchSize})
+            const {value, grads} = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
             
-            const criticValue = tf.minimum(q1Value, q2Value)
+            this.actorOptimizer.applyGradients(grads)
             
-            const loss = tf.mean(tf.scalar(this._alpha).mul(logProb).sub(criticValue))
-            assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
-            assertShape(logProb, [this._batchSize, 1], 'logProb')
-            assertShape(q1Value, [this._batchSize, 1], 'q1Value')
-            assertShape(criticValue, [this._batchSize, 1], 'criticValue')
+            if (this._verbose) console.log('Actor Loss: ' + value)
             
-            return loss
-        }
-        
-        const {value, grads} = tf.variableGrads(actorLossFunction, this.actor.getWeights(true)) // true means trainableOnly
-        
-        this.actorOptimizer.applyGradients(grads)
-        
-        if (this._verbose) console.log('Actor Loss: ' + value)
-        
-        this.updateTargets()
+            this.updateTargets()
+        })
     }
 
     /**
