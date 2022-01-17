@@ -18,7 +18,7 @@ const assertShape = (tensor, shape, msg = '') => {
 class AgentSac {
     constructor({
         batchSize = 1, 
-        frameShape = [128, 256, 3], 
+        frameShape = [64, 128, 3], 
         nFrames = 4, // Number of stacked frames per state
         nActions = 9, // 3 impulses by axis, 3 rotations, rgb color
         nTelemetry = 6, // 3 angular speeds and 3 speeds by axis
@@ -48,11 +48,12 @@ class AgentSac {
         this._actionInput = tf.input({batchShape : [null, nActions]})
 
         this.actor = this._getActor('Actor', trainable)
-
+    
         if (this._trainable) {
             this.actorOptimizer = tf.train.adam()
 
             this.q1 = this._getCritic('Q1')
+
             this.q1Optimizer = tf.train.adam()
 
             this.q1Targ = this._getCritic('Q1_target', false)
@@ -249,6 +250,8 @@ class AgentSac {
      * @returns {tf.LayersModel} model
      */
     _getActor(name = 'actor', trainable = true) {
+
+        console.log(this._frameInput)
         let outputs = this._getConvEncoder(this._frameInput)
         outputs = tf.layers.flatten().apply(outputs)
         outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
@@ -314,9 +317,9 @@ class AgentSac {
         const poolSize = 2
         const strides = 1
         const padding = 'same'
-        const layers = 14
+        const layers = 13
         
-        let filterPow = 2
+        let filterPow = 3
         let outputs = inputs
         
         for (let i = 0; i < layers; i++) {

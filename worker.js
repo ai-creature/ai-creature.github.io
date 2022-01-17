@@ -4,9 +4,9 @@ importScripts("reply_buffer.js")
 
 const [TRUE, FALSE] = [true, false]
 
-const agent = new AgentSac({batchSize: 7})
+const agent = new AgentSac({batchSize: 3})
 
-const rb = new ReplyBuffer(100)
+const rb = new ReplyBuffer()
 
 const SAME = FALSE
 let busy = TRUE
@@ -15,9 +15,14 @@ let prevIsBlack = FALSE
 let stack = []
 let stack2 = []
 
+/**
+ * Worker.
+ * 
+ * @returns delay in ms to get ready for the next job
+ */
 const job = async () => {
     const samples = rb.sample(agent._batchSize)
-    if (!samples.length) return
+    if (!samples.length) return 1000
 
     const 
         states = [],
@@ -26,7 +31,6 @@ const job = async () => {
         nextStates = []
 
     for (const { state, action, reward, nextState } of samples) {
-        console.log(reward.shape)
         states.push(state)
         actions.push(action)
         rewards.push(reward)
@@ -34,7 +38,6 @@ const job = async () => {
     }
 
     tf.tidy(() => {
-        
         agent.learn({
             state: tf.stack(states), 
             action: tf.stack(actions), 
@@ -42,12 +45,15 @@ const job = async () => {
             nextState: tf.stack(nextStates)
         })
     })
+    
+    self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))})
+
+    return 1
 }
 
 const tick = async () => {
     try {
-        await job()
-        setTimeout(tick, 0)
+        setTimeout(tick, await job())
     } catch (e) {
         console.error(e)
         setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
@@ -55,6 +61,12 @@ const tick = async () => {
 }
 setTimeout(tick, 0)
 
+/**
+ * Decode transition from the main thread.
+ * 
+ * @param {{ id, state, action, reward }} transition 
+ * @returns 
+ */
 const decodeTransition = transition => {
     let { id, state, action, reward } = transition
 
@@ -63,7 +75,7 @@ const decodeTransition = transition => {
         // TODO: make sexy getters for shapes
         state = tf.tensor3d(state, [...agent._frameShape.slice(0, 2), agent._frameShape[2] * agent._nFrames])
         action = tf.tensor1d(action)
-        reward = tf.scalar(reward)
+        reward = tf.tensor1d([reward])
 
         return { id, state, action, reward }
     })
@@ -72,6 +84,8 @@ const decodeTransition = transition => {
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
+            if (rb.size == 0) console.time('RB FULL')
+            if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))
             break
         default:

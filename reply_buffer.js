@@ -17,13 +17,13 @@
  * Reply Buffer.
  */
 class ReplyBuffer {
-    constructor(size = 500) {
-        this._size = size
+    constructor(limit = 500) {
+        this._limit = limit
         
-        this._buffer = new Array(size).fill()
+        this._buffer = new Array(limit).fill()
         this._pool = []
 
-        this.length = 0
+        this.size = 0
     }
 
     /**
@@ -37,12 +37,12 @@ class ReplyBuffer {
         if (id === undefined || id < 0 || priority < 1) 
             throw new Error('Invalid arguments')
 
-        const index = id % this._size
+        const index = id % this._limit
 
         if (this._buffer[index])
             this._pool = this._pool.filter(i => i !== index)
         else
-            this.length++
+            this.size++
 
         while (priority--) 
             this._pool.push(index)
@@ -58,7 +58,7 @@ class ReplyBuffer {
      * @returns array of exactly `n` samples
      */
     sample(n = 1) {
-        if (this.length < n) 
+        if (this.size < n) 
             return []
 
         const 
@@ -67,7 +67,7 @@ class ReplyBuffer {
 
         let counter = n
         while (counter--)
-            while (sampleIndices.size < this.length) {
+            while (sampleIndices.size < this.size) {
                 const randomIndex = this._pool[getRandomInt(0, this._pool.length - 1)]
                 if (sampleIndices.has(randomIndex))
                     continue
@@ -76,7 +76,7 @@ class ReplyBuffer {
 
                 const { id, state, action, reward } = this._buffer[randomIndex]
                 const nextId = id + 1
-                const next = this._buffer[nextId % this._size]
+                const next = this._buffer[nextId % this._limit]
 
                 if (next && next.id === nextId) {
                     samples.push({ state, action, reward, nextState: next.state})
@@ -97,20 +97,20 @@ class ReplyBuffer {
     rb.add({id: 1, state: 1})
     rb.add({id: 2, state: 2, priority: 3})
     
-    console.assert(rb.length === 3)
+    console.assert(rb.size === 3)
     console.assert(rb._pool.length === 5)
     console.assert(rb._buffer[0].id === 0)
     
     rb.add({id: 2, state: 2})
     rb.add({id: 4, state: 4, priority: 2})
     
-    console.assert(rb.length === 4)
+    console.assert(rb.size === 4)
     console.assert(rb._pool.length === 5)
     console.assert(JSON.stringify(rb._pool) === '[0,1,2,4,4]')
     
     rb.add({id: 5, state: 0, priority: 2}) // 5%5 = 0 => state = 0
     
-    console.assert(rb.length === 4)
+    console.assert(rb.size === 4)
     console.assert(rb._pool.length === 6)
     console.assert(rb._buffer.length === 5)
     console.assert(rb._buffer[0].id === 5)
