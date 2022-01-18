@@ -20,13 +20,13 @@ class AgentSac {
         batchSize = 1, 
         frameShape = [64, 128, 3], 
         nFrames = 4, // Number of stacked frames per state
-        nActions = 9, // 3 impulses by axis, 3 rotations, rgb color
-        nTelemetry = 6, // 3 angular speeds and 3 speeds by axis
+        nActions = 9, // 3 impulses, 3 rotations, rgb color
+        nTelemetry = 9, // 3 linear valocity, 3 angular velocity, collision point
         epsilon = 1e-6, // Small number
         alpha = 0.5, // Entropy scale (α)
         gamma = 0.99, // Discount factor (γ)
         tau = 5e-3, // Target smoothing coefficient (τ)
-        rewardScale = 2,
+        rewardScale = 1,
         trainable = true, // Whether the actor is trainable
         verbose = false
     } = {}) {
@@ -44,13 +44,14 @@ class AgentSac {
         this._verbose = verbose
 
         this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
+
         this._frameInput = tf.input({batchShape : [null, ...this._frameStackShape]})
         this._telemetryInput = tf.input({batchShape : [null, nTelemetry]})
         this._actionInput = tf.input({batchShape : [null, nActions]})
 
         this.actor = this._getActor('Actor', trainable)
     
-        if (this._trainable) {this._telemetryInput
+        if (this._trainable) {
             this.actorOptimizer = tf.train.adam()
 
             this.q1 = this._getCritic('Q1')
@@ -71,29 +72,26 @@ class AgentSac {
     /**
      * Trains networks on a batch from the replay buffer.
      * 
-     * @param {{state, action, reward, nextState}} - trnsitions in batch
+     * @param {{ state, action, reward, nextState }} - trnsitions in batch
      * @returns {void} nothing
      */
-    learn({state, action, reward, nextState}) {
+    learn({ state, action, reward, nextState }) {
         if (!this._trainable)
             throw new Error('Actor is not trainable')
 
         return tf.tidy(() => {
-            // const 
-            //     state = st,
-            //     action = tf.ones([this._batchSize, this._nActions]),
-            //     reward = tf.ones([this._batchSize, 1]),
-            //     nextState = tf.onesLike(state)
-            assertShape(state, [this._batchSize, ...this._frameStackShape], 'state')
+            assertShape(state[0], [this._batchSize, ...this._frameStackShape], 'frames')
+            assertShape(state[1], [this._batchSize, this._nTelemetry], 'telemetry')
             assertShape(action, [this._batchSize, this._nActions], 'action')
             assertShape(reward, [this._batchSize, 1], 'reward')
-            assertShape(nextState, state.shape, 'nextState')
+            assertShape(nextState[0], [this._batchSize, ...this._frameStackShape], 'nextState frames')
+            assertShape(nextState[1], [this._batchSize, this._nTelemetry], 'nextState telemetry')
     
             const getQLossFunction = (() => {
                 const [nextFreshAction, logProb] = this.sampleAction(nextState, true)
                 
-                const q1TargValue = this.q1Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
-                const q2TargValue = this.q2Targ.predict([nextState, nextFreshAction], {batchSize: this._batchSize})
+                const q1TargValue = this.q1Targ.predict([...nextState, nextFreshAction], {batchSize: this._batchSize})
+                const q2TargValue = this.q2Targ.predict([...nextState, nextFreshAction], {batchSize: this._batchSize})
                 
                 const qTargValue = tf.minimum(q1TargValue, q2TargValue)
     
@@ -112,7 +110,7 @@ class AgentSac {
     
                 return (q) => {
                     return () => {
-                        const qValue = q.predict([state, action], {batchSize: this._batchSize})
+                        const qValue = q.predict([...state, action], {batchSize: this._batchSize})
                         
                         const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
                         
@@ -135,8 +133,8 @@ class AgentSac {
             const actorLossFunction = () => {
                 const [freshAction, logProb] = this.sampleAction(state, true)
                 
-                const q1Value = this.q1.predict([state, freshAction], {batchSize: this._batchSize})
-                const q2Value = this.q2.predict([state, freshAction], {batchSize: this._batchSize})
+                const q1Value = this.q1.predict([...state, freshAction], {batchSize: this._batchSize})
+                const q2Value = this.q2.predict([...state, freshAction], {batchSize: this._batchSize})
                 
                 const criticValue = tf.minimum(q1Value, q2Value)
                 
@@ -251,15 +249,18 @@ class AgentSac {
      * @returns {tf.LayersModel} model
      */
     _getActor(name = 'actor', trainable = true) {
-        let outputs = this._getConvEncoder(this._frameInput)
-        outputs = tf.layers.flatten().apply(outputs)
-        outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
+        let convOutputs = this._getConvEncoder(this._frameInput)
+        convOutputs = tf.layers.flatten().apply(convOutputs)
+
+        const concatOutput = tf.layers.concatenate().apply([convOutputs, this._telemetryInput])
+
+        let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
         outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
 
         const mu =    tf.layers.dense({units: this._nActions}).apply(outputs)
         const sigma = tf.layers.dense({units: this._nActions}).apply(outputs)
 
-        const model = tf.model({inputs: this._frameInput, outputs: [mu, sigma], name})
+        const model = tf.model({inputs: [this._frameInput, this._telemetryInput], outputs: [mu, sigma], name})
         model.trainable = trainable
 
         if (this._verbose) {
@@ -284,14 +285,14 @@ class AgentSac {
         let convOutputs = this._getConvEncoder(this._frameInput)
         convOutputs = tf.layers.flatten().apply(convOutputs)
 
-        const concatOutput = tf.layers.concatenate().apply([convOutputs, this._actionInput])
+        const concatOutput = tf.layers.concatenate().apply([convOutputs, this._telemetryInput, this._actionInput])
 
         let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
         outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
 
         outputs = tf.layers.dense({units: 1}).apply(outputs)
 
-        const model = tf.model({inputs: [this._frameInput, this._actionInput], outputs, name})
+        const model = tf.model({inputs: [this._frameInput, this._telemetryInput, this._actionInput], outputs, name})
         model.trainable = trainable
 
         if (this._verbose) {

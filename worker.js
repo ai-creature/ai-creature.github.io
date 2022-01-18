@@ -21,30 +21,40 @@ let stack2 = []
  * @returns delay in ms to get ready for the next job
  */
 const DISABLED = FALSE
+
 const job = async () => {
     if (DISABLED) return
     const samples = rb.sample(agent._batchSize)
     if (!samples.length) return 1000
 
     const 
-        states = [],
+        frames = [],
+        telemetries = [],
         actions = [],
         rewards = [],
-        nextStates = []
+        nextFrames = [],
+        nextTelemetries = []
 
-    for (const { state, action, reward, nextState } of samples) {
-        states.push(state)
+    for (const { 
+        state: [frame, telemetry], 
+        action, 
+        reward, 
+        nextState: [nextFrame, nextTelemetry] 
+    } of samples) {
+        frames.push(frame)
+        telemetries.push(telemetry)
         actions.push(action)
         rewards.push(reward)
-        nextStates.push(nextState)
+        nextFrames.push(nextFrame)
+        nextTelemetries.push(nextTelemetry)
     }
 
     tf.tidy(() => {
         agent.learn({
-            state: tf.stack(states), 
+            state: [tf.stack(frames), tf.stack(telemetries)], 
             action: tf.stack(actions), 
             reward: tf.stack(rewards), 
-            nextState: tf.stack(nextStates)
+            nextState: [tf.stack(nextFrames), tf.stack(nextTelemetries)]
         })
     })
     
@@ -52,6 +62,7 @@ const job = async () => {
 
     return 1
 }
+
 /**
  * Executes job.
  */
@@ -63,6 +74,7 @@ const tick = async () => {
         setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
     }
 }
+
 setTimeout(tick, 1000)
 
 /**
@@ -72,10 +84,13 @@ setTimeout(tick, 1000)
  * @returns 
  */
 const decodeTransition = transition => {
-    let { id, state, action, reward } = transition
+    let { id, state: [frames, telemetry], action, reward } = transition
 
     return tf.tidy(() => {
-        state = tf.tensor3d(state, agent._frameStackShape)
+        state = [
+            tf.tensor3d(frames, agent._frameStackShape),
+            tf.tensor1d(telemetry)
+        ]
         action = tf.tensor1d(action)
         reward = tf.tensor1d([reward])
 
