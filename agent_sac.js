@@ -43,13 +43,14 @@ class AgentSac {
         this._trainable = trainable
         this._verbose = verbose
 
-        this._frameInput = tf.input({batchShape : [null, ...frameShape.slice(0, 2), frameShape[2] * nFrames]})
+        this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
+        this._frameInput = tf.input({batchShape : [null, ...this._frameStackShape]})
         this._telemetryInput = tf.input({batchShape : [null, nTelemetry]})
         this._actionInput = tf.input({batchShape : [null, nActions]})
 
         this.actor = this._getActor('Actor', trainable)
     
-        if (this._trainable) {
+        if (this._trainable) {this._telemetryInput
             this.actorOptimizer = tf.train.adam()
 
             this.q1 = this._getCritic('Q1')
@@ -83,7 +84,7 @@ class AgentSac {
             //     action = tf.ones([this._batchSize, this._nActions]),
             //     reward = tf.ones([this._batchSize, 1]),
             //     nextState = tf.onesLike(state)
-            assertShape(state, [this._batchSize, ...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames], 'state')
+            assertShape(state, [this._batchSize, ...this._frameStackShape], 'state')
             assertShape(action, [this._batchSize, this._nActions], 'action')
             assertShape(reward, [this._batchSize, 1], 'reward')
             assertShape(nextState, state.shape, 'nextState')
@@ -250,8 +251,6 @@ class AgentSac {
      * @returns {tf.LayersModel} model
      */
     _getActor(name = 'actor', trainable = true) {
-
-        console.log(this._frameInput)
         let outputs = this._getConvEncoder(this._frameInput)
         outputs = tf.layers.flatten().apply(outputs)
         outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)

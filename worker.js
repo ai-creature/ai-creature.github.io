@@ -50,7 +50,9 @@ const job = async () => {
 
     return 1
 }
-
+/**
+ * Executes job.
+ */
 const tick = async () => {
     try {
         setTimeout(tick, await job())
@@ -59,7 +61,7 @@ const tick = async () => {
         setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
     }
 }
-setTimeout(tick, 0)
+setTimeout(tick, 1000)
 
 /**
  * Decode transition from the main thread.
@@ -71,9 +73,7 @@ const decodeTransition = transition => {
     let { id, state, action, reward } = transition
 
     return tf.tidy(() => {
-        // TODO: figure out which type is better 'float32' for tf.tensor
-        // TODO: make sexy getters for shapes
-        state = tf.tensor3d(state, [...agent._frameShape.slice(0, 2), agent._frameShape[2] * agent._nFrames])
+        state = tf.tensor3d(state, agent._frameStackShape)
         action = tf.tensor1d(action)
         reward = tf.tensor1d([reward])
 
@@ -84,8 +84,8 @@ const decodeTransition = transition => {
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
-            if (rb.size == 0) console.time('RB FULL')
-            if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
+            // if (rb.size == 0) console.time('RB FULL')
+            // if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))
             break
         default:

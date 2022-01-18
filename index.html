@@ -52,14 +52,13 @@
     <canvas id="renderCanvas"></canvas>
     <canvas id="testCanvas"></canvas>
     <script>
-        const agent = new AgentSac({trainable: false, verbose: true})
-        
-        var canvas = document.getElementById("renderCanvas");
+        window.engine = null;
+        window.scene = null;
+        window.sceneToRender = null;
 
-        var engine = null;
-        var scene = null;
-        var sceneToRender = null;
-        var createDefaultEngine = function() { 
+        const agent = new AgentSac({trainable: false, verbose: false})
+        const canvas = document.getElementById("renderCanvas");
+        const createDefaultEngine = function() { 
             return new BABYLON.Engine(canvas, true, {
                 preserveDrawingBuffer: true, 
                 stencil: true,  
@@ -67,19 +66,18 @@
             }); 
         };
 
-        var createScene = async function () {
-            
+        const createScene = async function () {
             // This creates a basic Babylon Scene object (non-mesh)
-            var scene = new BABYLON.Scene(engine);
-        
+            const scene = new BABYLON.Scene(engine);
+
             // Environment
-            var hdrTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("3d/env/environment.dds", scene);
+            const hdrTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("3d/env/environment.dds", scene);
             hdrTexture.name = "envTex";
             hdrTexture.gammaSpace = false;
             scene.environmentTexture = hdrTexture;
         
-            var skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:1000.0}, scene);
-            var skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
+            const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", {size:1000.0}, scene);
+            const skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
             skyboxMaterial.backFaceCulling = false;
             skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("3d/env/skybox", scene);
             skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
@@ -88,23 +86,33 @@
             skybox.material = skyboxMaterial;
         
             //CAMERA
-            var camera = new BABYLON.ArcRotateCamera("Camera", BABYLON.Tools.ToRadians(-120), BABYLON.Tools.ToRadians(80), 65, new BABYLON.Vector3(0, -15, 0), scene);    
+            const camera = new BABYLON.ArcRotateCamera("Camera", BABYLON.Tools.ToRadians(-120), BABYLON.Tools.ToRadians(80), 65, new BABYLON.Vector3(0, -15, 0), scene);    
             camera.attachControl(canvas, true);
             camera.lowerRadiusLimit = 10;
             camera.upperRadiusLimit = 120;
 
             //enable Physics in the scene vector = gravity
-            scene.enablePhysics(new BABYLON.Vector3(0, 0, 0), new BABYLON.AmmoJSPlugin());
+            scene.enablePhysics(new BABYLON.Vector3(0, 0, 0), new BABYLON.AmmoJSPlugin(false));
+
+            const physicsEngine = scene.getPhysicsEngine()
+
+            // console.log(physicsEngine.getTimeStep())
+            // physicsEngine.setTimeStep(1 / 60)
+
+            physicsEngine.setSubTimeStep(physicsEngine.getTimeStep()/2 * 1000)
+
         
             //LIGHTS
-            var light1 = new BABYLON.PointLight("light1", new BABYLON.Vector3(0, 5,-6), scene);
-            var light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(6, 5, 3.5), scene);
-            var light3 = new BABYLON.DirectionalLight("light3", new BABYLON.Vector3(20, -5, 20), scene);
+            const light1 = new BABYLON.PointLight("light1", new BABYLON.Vector3(0, 5,-6), scene);
+            const light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(6, 5, 3.5), scene);
+            const light3 = new BABYLON.DirectionalLight("light3", new BABYLON.Vector3(20, -5, 20), scene);
             light1.intensity = 15;
             light2.intensity = 5;
         
 
             engine.displayLoadingUI();
+
+
 
 
             await BABYLON.SceneLoader.AppendAsync("3d/marbleTower.glb");
@@ -154,24 +162,24 @@
 
             
             /* ANIMATION */
-            const rand = (min, max) => Math.random() * (max - min) + min
-            ;(() => {
-                let start = Date.now()
-                scene.registerBeforeRender(() => {
-                    const elapsed = Date.now() - start
-                    if (elapsed < 1000) return
-                    start = Date.now()
+            // const rand = (min, max) => Math.random() * (max - min) + min
+            // ;(() => {
+            //     let start = Date.now()
+            //     scene.registerBeforeRender(() => {
+            //         const elapsed = Date.now() - start
+            //         if (elapsed < 1000) return
+            //         start = Date.now()
 
-                    const range = [-0.5, 0.5]
-                    var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
-                    creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
+            //         const range = [-0.5, 0.5]
+            //         var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
+            //         creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
                     
-                    // const rotRange = [-Math.PI/209, Math.PI/209]
-                    // creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
+            //         // const rotRange = [-Math.PI/209, Math.PI/209]
+            //         // creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
 
-                    creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
-                })
-            })()
+            //         creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
+            //     })
+            // })()
 
             /* CAGE */
             const cage = BABYLON.MeshBuilder.CreateBox("cage", {
@@ -190,6 +198,7 @@
 
 
             /* CREATURE's CAMERA */
+            /*
             const mirror = BABYLON.MeshBuilder.CreateBox("mirror", {
                 width: 10, 
                 depth: 0.1, 
@@ -199,6 +208,8 @@
             mirror.position = new BABYLON.Vector3(20, 0, 0)
             // mirror.addRotation(0, Math.PI/2, 0)
             mirror.isVisible = true
+            // How to use: mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
+            */
 
             var crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(1, 0, 0), scene)
             crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
@@ -208,16 +219,10 @@
             const worker = new Worker('worker.js')
 
             worker.addEventListener('message', e => {
-                const {frame, weights} = e.data
-                
+                const { weights } = e.data
                 if (weights)
                     tf.tidy(() => {
-                        // if (frame)
-                        //     tf.browser.toPixels(frame, document.getElementById("testCanvas")) // timer ~4ms
-
-                        console.time('weights')
                         agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-                        console.timeEnd('weights')
                     })
             })
 
@@ -238,7 +243,7 @@
             const TRANSITIONS_BUFFER_SIZE = 2
             const scalar255 = tf.scalar(255)
 
-            scene.registerBeforeRender(async () => { // timer ~ 20-90ms
+            scene.registerAfterRender(async () => { // timer ~ 20-90ms
                 if (Date.now() < start || busy) return
                 start = Date.now() + frameEvery
                 busy = true
@@ -270,13 +275,24 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     const stateNorm = state.div(scalar255)
                     const batchState = tf.stack([stateNorm])
                     const action = agent.sampleAction(batchState)
-                    
-                    const [stateArr, actionArr] = await Promise.all([stateNorm.array(), action.array()])
+                    const [stateArr, [actionData]] = await Promise.all([stateNorm.array(), action.array()])
+
+                    const 
+                        impulse = actionData.slice(0, 3),
+                        rotation = actionData.slice(3, 6)//.map(el => el),
+                        color = actionData.slice(6, 9)//.map(el => el) // [-1,1] => [0,2] => [0, 255]
+
+                    creature
+                        .addRotation(rotation[0], 0, 0)
+                        .addRotation(0, rotation[1], 0)
+                        .addRotation(0, 0, rotation[2])
+                    creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), BABYLON.Vector3.Zero()) // contact point zero
+                    creature.glow.color2 = new BABYLON.Color4(...color)
 
                     transitions.push({
                         id: stateId++, 
                         state: stateArr, // 20ms vs 50ms || size 200kb vs 1.5mb
-                        action: actionArr[0], // action come as a batch of size 1
+                        action: actionData, // action come as a batch of size 1
                         reward: 0
                     })
 
@@ -306,7 +322,7 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
                 };
                 image.src = base64Data
                 
-                mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
+                //mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                 
                 // const img = await base64ToImg(base64Data) // timer ~2-12ms
                 // const tensor = tf.browser.fromPixels(img) // timer ~ 1ms
@@ -323,7 +339,7 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
         window.initFunction = async function() {
             await Ammo();
             
-            var asyncEngineCreation = async function() {
+            const asyncEngineCreation = async function() {
                 try {
                     return createDefaultEngine();
                 } catch(e) {
@@ -351,7 +367,6 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
         window.addEventListener("resize", function () {
             engine.resize();
         });
-
     </script>
 </body>
 </html>
