@@ -20,7 +20,9 @@ let stack2 = []
  * 
  * @returns delay in ms to get ready for the next job
  */
+const DISABLED = FALSE
 const job = async () => {
+    if (DISABLED) return
     const samples = rb.sample(agent._batchSize)
     if (!samples.length) return 1000
 
@@ -84,6 +86,7 @@ const decodeTransition = transition => {
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
+            if (DISABLED) return
             // if (rb.size == 0) console.time('RB FULL')
             // if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))

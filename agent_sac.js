@@ -207,7 +207,7 @@ class AgentSac {
             const reparamSample = mu.add(sigma.mul(epsilon))
     
             const action = tf.tanh(reparamSample) // * 1 max_action is 1?
-    
+
             if (!withLogProbs) return action
     
             const logProb = this._logProb(reparamSample, mu, sigma)

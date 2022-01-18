@@ -52,6 +52,7 @@
     <canvas id="renderCanvas"></canvas>
     <canvas id="testCanvas"></canvas>
     <script>
+        const print = (...args) => console.log(...args)
         window.engine = null;
         window.scene = null;
         window.sceneToRender = null;
@@ -109,11 +110,7 @@
             light1.intensity = 15;
             light2.intensity = 5;
         
-
             engine.displayLoadingUI();
-
-
-
 
             await BABYLON.SceneLoader.AppendAsync("3d/marbleTower.glb");
 
@@ -122,7 +119,7 @@
             tower.impostor = new BABYLON.PhysicsImpostor(tower, BABYLON.PhysicsImpostor.MeshImpostor, {
                 mass: 0,
                 friction: 1
-            });
+            }, scene);
             
             /* CREATURE */
             const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 1, segments: 32}, scene);
@@ -194,7 +191,7 @@
             cage.impostor = new BABYLON.PhysicsImpostor(cage, BABYLON.PhysicsImpostor.MeshImpostor, {
                 mass: 0,
                 friction: 1
-            });
+            }, scene);
 
 
             /* CREATURE's CAMERA */
@@ -243,6 +240,28 @@
             const TRANSITIONS_BUFFER_SIZE = 2
             const scalar255 = tf.scalar(255)
 
+            // console.log(creature.impostor)
+/*
+            creature.impostor.onCollide = function (m) {
+                console.log("*** GOT THIS COLLISION ***");
+            };
+
+            function test(collider, collidedAgainst) {
+                console.log("that happened");
+            }
+            creature.impostor.registerOnPhysicsCollide(tower.impostor, test);
+*/
+            // creature.impostor.onCollideEvent = function (self, other) {
+                // console.log(self.intersectsMesh(other, false))
+                // console.log(self, other, self.position);
+                // self.object.dispose();
+            // }
+
+            const imposters = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
+            creature.impostor.registerOnPhysicsCollide(imposters, function(main, collided) {
+                
+            });
+
             scene.registerAfterRender(async () => { // timer ~ 20-90ms
                 if (Date.now() < start || busy) return
                 start = Date.now() + frameEvery
@@ -274,13 +293,25 @@ console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     const state = tf.concat(tensors, 2) // TODO: need to dispose?
                     const stateNorm = state.div(scalar255)
                     const batchState = tf.stack([stateNorm])
+
+                    const linearVelocity = creature.impostor.getLinearVelocity().normalize()
+                    const angularVelocity = creature.impostor.getAngularVelocity().normalize()
+                    const telemetry = [
+                        linearVelocity.x,
+                        linearVelocity.y,
+                        linearVelocity.z,
+                        angularVelocity.x,
+                        angularVelocity.y,
+                        angularVelocity.z
+                    ]
+
                     const action = agent.sampleAction(batchState)
                     const [stateArr, [actionData]] = await Promise.all([stateNorm.array(), action.array()])
 
                     const 
                         impulse = actionData.slice(0, 3),
-                        rotation = actionData.slice(3, 6)//.map(el => el),
-                        color = actionData.slice(6, 9)//.map(el => el) // [-1,1] => [0,2] => [0, 255]
+                        rotation = actionData.slice(3, 6), //.map(el => el),
+                        color = actionData.slice(6, 9) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
 
                     creature
                         .addRotation(rotation[0], 0, 0)
