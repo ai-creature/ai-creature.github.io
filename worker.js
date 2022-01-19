@@ -3,20 +3,20 @@ importScripts("agent_sac.js")
 importScripts("reply_buffer.js")
 
 const agent = new AgentSac({batchSize: 3})
-const rb = new ReplyBuffer(100, ({ state: [frame, telemetry], action, reward }) => {
+const rb = new ReplyBuffer(500, ({ state: [frame, telemetry], action, reward }) => {
     frame.dispose()
     telemetry.dispose()
     action.dispose()
     reward.dispose()
 })
 
+const DISABLED = false
+
 /**
  * Worker.
  * 
  * @returns delay in ms to get ready for the next job
  */
-const DISABLED = false
-
 const job = async () => {
     if (DISABLED) return
 
@@ -95,7 +95,6 @@ const decodeTransition = transition => {
 }
 
 let i = 0
-
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
@@ -105,8 +104,6 @@ self.addEventListener('message', async e => {
             // if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))
 
-            if (i++ % 100==0) console.log('numTensors worker: ' + tf.memory().numTensors, rb.size)
-
             break
         default:
             console.warn('Unknown action')
@@ -114,85 +111,4 @@ self.addEventListener('message', async e => {
     }
 
     return
-
-
-
-    const SAME = FALSE
-let busy = TRUE
-let prevIsBlack = FALSE
-let stack = []
-let stack2 = []
-
-
-
-
-    if (busy || i > 50) return
-    busy = TRUE
-    i++
-
-    const frame = tf.tensor3d(e.data, shape, 'float32')
-    const frameNorm = frame.div(tf.scalar(255))
-
-    stack.push(frameNorm)
-    stack2.push(frame)
-
-    if (stack.length < stackFrames) {
-        busy = FALSE
-        return
-    }
-
-    const input = tf.stack([tf.concat(stack, 2)])
-
-    // console.time("learn timer")
-    // tf.tidy(()=>{
-    //     agent.learn(input)
-    // })
-    // console.timeEnd("learn timer")
-
-
-    // const [action, logProb] = agent.sampleAction(input)
-    // console.log("ACTION: ", logProb)
-    // console.log("ARRAY: ", await logProb.array())
-
-
-
-    //learn(st)
-    
-    // const lossFunction = () => tf.tidy(() => {
-    //     const preds = model.predict(input)
-
-    //     return tf.losses.meanSquaredError(labels, preds).asScalar()
-    // })
-
-    // const {value, grads} = tf.variableGrads(lossFunction)
-
-    // optimizer.applyGradients(grads)
-     
-    // console.log("Loss: " + value)
-    
-    // tf.dispose(action)
-    // tf.dispose(logProb)
-    // tf.dispose(value)
-    // tf.dispose(grads)
-    input.dispose()
-    // labels.dispose()
-
-    const data = await frame.array()
-
-    stack.forEach(frameNorm => frameNorm.dispose())
-    stack2.forEach(frame => frame.dispose())
-    stack = []
-    stack2 = []
-
-    // if (i%24 < 5) {
-        console.time("send weights")
-        self.postMessage({frame: data, weights: agent.actor.getWeights().map(w => w.arraySync())}) // timer ~10ms for send Weights
-
-        console.timeEnd("send weights")
-    // }
-
-    busy = FALSE
 })
-
-
-

@@ -235,6 +235,7 @@
                         { x, y, z } = e.point
                     
                     collision = new BABYLON.Vector3(x - x0, y - y0, z - z0).normalize()
+                    print(collision.x, collision.y, collision.z)
                 }
 
                 const base64ToImg = (base64) => new Promise((res, _) => {
@@ -298,6 +299,10 @@
                             collision.y,
                             collision.z
                         ]
+                        let reward = 0
+                        if (collision.x || collision.y || collision.z)
+                            reward = -1
+
                         collision = BABYLON.Vector3.Zero() // reset collision point
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
 
@@ -321,7 +326,7 @@
                             id: stateId++, 
                             state: [framesArr, telemetry], // 20ms vs 50ms || size 200kb vs 1.5mb
                             action: actionArr,
-                            reward: 0
+                            reward
                         })
 
                         if (transitions.length >= TRANSITIONS_BUFFER_SIZE) {
