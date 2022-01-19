@@ -2,28 +2,24 @@ importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.
 importScripts("agent_sac.js")
 importScripts("reply_buffer.js")
 
-const [TRUE, FALSE] = [true, false]
-
 const agent = new AgentSac({batchSize: 3})
-
-const rb = new ReplyBuffer()
-
-const SAME = FALSE
-let busy = TRUE
-let i = 0
-let prevIsBlack = FALSE
-let stack = []
-let stack2 = []
+const rb = new ReplyBuffer(100, ({ state: [frame, telemetry], action, reward }) => {
+    frame.dispose()
+    telemetry.dispose()
+    action.dispose()
+    reward.dispose()
+})
 
 /**
  * Worker.
  * 
  * @returns delay in ms to get ready for the next job
  */
-const DISABLED = FALSE
+const DISABLED = false
 
 const job = async () => {
     if (DISABLED) return
+
     const samples = rb.sample(agent._batchSize)
     if (!samples.length) return 1000
 
@@ -98,13 +94,19 @@ const decodeTransition = transition => {
     })
 }
 
+let i = 0
+
 self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
             if (DISABLED) return
+
             // if (rb.size == 0) console.time('RB FULL')
             // if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))
+
+            if (i++ % 100==0) console.log('numTensors worker: ' + tf.memory().numTensors, rb.size)
+
             break
         default:
             console.warn('Unknown action')
@@ -112,6 +114,17 @@ self.addEventListener('message', async e => {
     }
 
     return
+
+
+
+    const SAME = FALSE
+let busy = TRUE
+let prevIsBlack = FALSE
+let stack = []
+let stack2 = []
+
+
+
 
     if (busy || i > 50) return
     busy = TRUE

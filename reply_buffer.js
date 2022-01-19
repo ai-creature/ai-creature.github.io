@@ -1,11 +1,10 @@
 /**
- * https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
- * 
  * Returns a random integer between min (inclusive) and max (inclusive).
  * The value is no lower than min (or the next integer greater than min
  * if min isn't an integer) and no greater than max (or the next integer
  * lower than max if max isn't an integer).
  * Using Math.round() will give you a non-uniform distribution!
+ * https://stackoverflow.com/questions/1527803/generating-random-whole-numbers-in-javascript-in-a-specific-range
  */
  const getRandomInt = (min, max)  => {
     min = Math.ceil(min)
@@ -17,9 +16,16 @@
  * Reply Buffer.
  */
 class ReplyBuffer {
-    constructor(limit = 500) {
+    /**
+     * Constructor.
+     * 
+     * @param {*} limit maximum number of transitions
+     * @param {*} onDiscard callback triggered on discard a transition
+     */
+    constructor(limit = 500, onDiscard = () => {}) {
         this._limit = limit
-        
+        this._onDiscard = onDiscard
+
         this._buffer = new Array(limit).fill()
         this._pool = []
 
@@ -30,7 +36,7 @@ class ReplyBuffer {
      * Add a new transition to the reply buffer. 
      * Transition doesn't contain the next state. The next state is derived when sampling.
      * 
-     * @param {{id: number, priority: number, state, action, reward: number}} transition transition
+     * @param {{id: number, priority: number, state: array, action, reward: number}} transition transition
      */
     add(transition) {
         let {id, priority = 1} = transition
@@ -39,9 +45,10 @@ class ReplyBuffer {
 
         const index = id % this._limit
 
-        if (this._buffer[index])
+        if (this._buffer[index]) {
             this._pool = this._pool.filter(i => i !== index)
-        else
+            this._onDiscard(this._buffer[index])
+        } else
             this.size++
 
         while (priority--) 
