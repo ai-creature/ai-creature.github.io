@@ -39,20 +39,48 @@
                 height: 100%;
                 touch-action: none;
             }
-            #testCanvas {
+            #testCanvas0 {
                 position:absolute;
                 width: 128px;
                 height: 64px;
-                right:0;
-                bottom:0;
+                right:450px;
+                bottom: 0;
+            }
+
+            #testCanvas1 {
+                position:absolute;
+                width: 128px;
+                height: 64px;
+                right: 300px;
+                bottom: 0;
+            }
+
+            #testCanvas2 {
+                position:absolute;
+                width: 128px;
+                height: 64px;
+                right: 150px;
+                bottom: 0;
+            }
+
+            #testCanvas3 {
+                position:absolute;
+                width: 128px;
+                height: 64px;
+                right: 0px;
+                bottom: 0;
             }
         </style>
     </head>
     <body>
         <canvas id="renderCanvas"></canvas>
-        <canvas id="testCanvas"></canvas>
+        <canvas id="testCanvas0"></canvas>
+        <canvas id="testCanvas1"></canvas>
+        <canvas id="testCanvas2"></canvas>
+        <canvas id="testCanvas3"></canvas>
         <script>
             const print = (...args) => console.log(...args)
+            
             window.engine = null;
             window.scene = null;
             window.sceneToRender = null;
@@ -97,7 +125,7 @@
 
                 const physicsEngine = scene.getPhysicsEngine()
                 // console.log(physicsEngine.getTimeStep())
-                // physicsEngine.setTimeStep(1 / 60)
+                // physicsEngine.setTimeStep(1 / 50)
                 physicsEngine.setSubTimeStep(physicsEngine.getTimeStep()/2 * 1000)
             
                 //LIGHTS
@@ -223,10 +251,8 @@
 
 
                 /* COLLISIONS DETECTION */
-                const imposters = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
-                creature.impostor.registerOnPhysicsCollide(imposters, (body1, body2) => {
-                    console.log("collide between ", body1.object.id, "and ", body2.object.id)
-                })
+                const impostors = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
+                creature.impostor.registerOnPhysicsCollide(impostors /* tower.impostor */, (body1, body2) => {})
 
                 let collision = BABYLON.Vector3.Zero()
                 creature.impostor.onCollide = e => {
@@ -235,7 +261,7 @@
                         { x, y, z } = e.point
                     
                     collision = new BABYLON.Vector3(x - x0, y - y0, z - z0).normalize()
-                    print(collision.x, collision.y, collision.z)
+                    //print(collision.x, collision.y, collision.z)
                 }
 
                 const base64ToImg = (base64) => new Promise((res, _) => {
@@ -252,6 +278,8 @@
                 let start = Date.now() + frameEvery
                 let busy = false
                 let stateId = 0
+
+                let rewardCombo = 0
 
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
                     if (Date.now() < start || busy) return
@@ -299,9 +327,19 @@
                             collision.y,
                             collision.z
                         ]
+
                         let reward = 0
-                        if (collision.x || collision.y || collision.z)
+                        if (collision.x || collision.y || collision.z) {
+                            rewardCombo = 0
                             reward = -1
+                        } else {
+                            rewardCombo++
+                            if (rewardCombo >= 10) {
+                                reward = +1
+                            }
+                        }
+
+                        print('reward: ', reward)
 
                         collision = BABYLON.Vector3.Zero() // reset collision point
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
@@ -311,7 +349,7 @@
                         const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
 
                         const 
-                            impulse = actionArr.slice(0, 3),
+                            impulse = actionArr.slice(0, 3).map(v => v),
                             rotation = actionArr.slice(3, 6), //.map(el => el),
                             color = actionArr.slice(6, 9) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
 
@@ -345,18 +383,27 @@
                         telemetryBatch.dispose()
                         action.dispose()
 
+                        if (stateId%20 == 0)
+                        frameStack.forEach((base64Data, i) => {
+                            const img = new Image()
+                            img.onload = () => document.getElementById('testCanvas' + i)
+                                .getContext('2d')
+                                .drawImage(img, 0, 0, 256, 128)
+                            img.src = base64Data
+                        })
+
                         frameStack.length = 0 // I will regret about this :D
                     }
 
                     // Creature's point of view
-                    ;(() => {
-                        const img = new Image()
-                        img.onload = () => document.getElementById('testCanvas')
-                            .getContext('2d')
-                            .drawImage(img, 0, 0, 256, 128)
-                        img.src = base64Data
-                    })()
-                    
+                    // ;(() => {
+                    //     const img = new Image()
+                    //     img.onload = () => document.getElementById('testCanvas')
+                    //         .getContext('2d')
+                    //         .drawImage(img, 0, 0, 256, 128)
+                    //     img.src = base64Data
+                    // })()
+
                     //mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                     
                     // const img = await base64ToImg(base64Data) // timer ~2-12ms

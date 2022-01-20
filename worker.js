@@ -2,8 +2,10 @@ importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.12.0/dist/tf.min.
 importScripts("agent_sac.js")
 importScripts("reply_buffer.js")
 
-const agent = new AgentSac({batchSize: 3})
-const rb = new ReplyBuffer(500, ({ state: [frame, telemetry], action, reward }) => {
+const print = (...args) => console.log(...args)
+
+const agent = new AgentSac({batchSize: 3, verbose: true})
+const rb = new ReplyBuffer(200, ({ state: [frame, telemetry], action, reward }) => {
     frame.dispose()
     telemetry.dispose()
     action.dispose()
@@ -18,7 +20,8 @@ const DISABLED = false
  * @returns delay in ms to get ready for the next job
  */
 const job = async () => {
-    if (DISABLED) return
+    if (DISABLED) return 99999
+    if (rb.size < 20) return 1000
 
     const samples = rb.sample(agent._batchSize)
     if (!samples.length) return 1000
@@ -99,7 +102,7 @@ self.addEventListener('message', async e => {
     switch (e.data.action) {
         case 'newTransition':
             if (DISABLED) return
-
+            if (i++%20==0) console.log('RBSIZE: ', rb.size)
             // if (rb.size == 0) console.time('RB FULL')
             // if (rb.size == rb._limit-1) {console.timeEnd('RB FULL'); console.log(cnt)}
             rb.add(decodeTransition(e.data.transition))

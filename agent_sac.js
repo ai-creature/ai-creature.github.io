@@ -11,6 +11,10 @@ const assertShape = (tensor, shape, msg = '') => {
         msg + ' shape ' + tensor.shape + ' is not ' + shape)
 }
 
+const LOG_STD_MIN = -20
+const LOG_STD_MAX = 2
+const EPSILON = 1e-8
+
 /**
  * Soft Actor Critic Agent https://arxiv.org/abs/1812.05905
  * without value network.
@@ -22,7 +26,7 @@ class AgentSac {
         nFrames = 4, // Number of stacked frames per state
         nActions = 9, // 3 impulses, 3 rotations, rgb color
         nTelemetry = 9, // 3 linear valocity, 3 angular velocity, collision point
-        epsilon = 1e-6, // Small number
+        // epsilon = 1e-6, // Small number
         alpha = 0.5, // Entropy scale (α)
         gamma = 0.99, // Discount factor (γ)
         tau = 5e-3, // Target smoothing coefficient (τ)
@@ -35,7 +39,7 @@ class AgentSac {
         this._nFrames = nFrames
         this._nActions = nActions
         this._nTelemetry = nTelemetry
-        this._epsilon = epsilon
+        // this._epsilon = epsilon
         this._alpha = alpha
         this._gamma = gamma
         this._tau = tau
@@ -127,6 +131,8 @@ class AgentSac {
                 const {value, grads} = tf.variableGrads(qLossFunction, q.getWeights(true)) // true means trainableOnly
     
                 optimizer.applyGradients(grads)
+
+                if (this._verbose) console.log(q.name + ' Loss: ' + value.arraySync())
             }
     
             // TODO: consider delayed update of policy and targets (if possible)
@@ -151,7 +157,7 @@ class AgentSac {
             
             this.actorOptimizer.applyGradients(grads)
             
-            if (this._verbose) console.log('Actor Loss: ' + value)
+            if (this._verbose) console.log('Actor Loss: ' + value.arraySync())
             
             this.updateTargets()
         })
@@ -185,7 +191,7 @@ class AgentSac {
     }
 
     /**
-     * Returns actions sampled from normal distribution using means and sigmas predicted by the actor.
+     * Returns actions sampled from normal distribution using means and stds predicted by the actor.
      * 
      * @param {Tensor} state - state
      * @param {Tensor} [withLogProbs = false] - whether return log probabilities
@@ -193,33 +199,38 @@ class AgentSac {
      */
     sampleAction(state, withLogProbs = false) { // timer ~3ms
         return tf.tidy(() => {
-            let [mu, sigma] = this.actor.predict(state, {batchSize: this._batchSize})
-            sigma = tf.clipByValue(sigma, this._epsilon, 1) // do we need to clip sigma??? 
-            // TODO: output log(std) instead of std
-            // assert LOG_SIG_MIN <= self.log_std <= LOG_SIG_MAX https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
-      
-            // sample epsilon N(mu = 0, sigma = 1)
-            const epsilon = tf.randomNormal(mu.shape.slice(0, 2), 0, 1.0)
-    
-            // reparameterization trick: z = mu + sigma * epsilon
-            const reparamSample = mu.add(sigma.mul(epsilon))
-    
-            const action = tf.tanh(reparamSample) // * 1 max_action is 1?
+            let [ mu, logStd ] = this.actor.predict(state, {batchSize: this._batchSize})
 
-            if (!withLogProbs) return action
+            // https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
+            logStd = tf.clipByValue(logStd, LOG_STD_MIN, LOG_STD_MAX) 
+            
+            const std = tf.exp(logStd)
+
+            // sample normal N(mu = 0, std = 1)
+            const normal = tf.randomNormal(mu.shape, 0, 1.0)
     
-            const logProb = this._logProb(reparamSample, mu, sigma)
-      
-            // Enforcing Action Bound
-            const logProbBounded = logProb.sub(
-              tf.log(
-                tf.scalar(1)
-                  .sub(action.pow(tf.scalar(2).toInt()))
-                  .add(this._epsilon)
-              )
-            ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
+            // reparameterization trick: z = mu + std * epsilon
+            let pi = mu.add(std.mul(normal))
+
+            let logPi = this._gaussianLikelihood(pi, mu, logStd)
+
+            ;({ pi, logPi } = this._applySquashing(pi, mu, logPi))
+
+            if (!withLogProbs)
+                return pi
+
+            // const logProb = this._logProb(pi, mu, std)
+
+            // // Enforcing Action Bound
+            // const logProbBounded = logProb.sub(
+            //   tf.log(
+            //     tf.scalar(1)
+            //       .sub(action.pow(tf.scalar(2).toInt()))
+            //       .add(EPSILON)
+            //   )
+            // ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
     
-            return [action, logProbBounded]
+            return [pi, logPi]
         })
     }
 
@@ -227,18 +238,72 @@ class AgentSac {
      * Calculates log probability of normal distribution https://en.wikipedia.org/wiki/Log_probability.
      * Converted to js from https://github.com/tensorflow/probability/blob/f3777158691787d3658b5e80883fe1a933d48989/tensorflow_probability/python/distributions/normal.py#L183
      * 
-     * @param {Tensor} x - sample from normal distribution with mean `mu` and std `sigma`
+     * @param {Tensor} x - sample from normal distribution with mean `mu` and std `std`
      * @param {Tensor} mu - mean
-     * @param {Tensor} sigma - standart deviation
+     * @param {Tensor} std - standart deviation
      * @returns {Tensor} log probability
      */
-    _logProb(x, mu, sigma)  {
+    _logProb(x, mu, std)  {
         const logUnnormalized = tf.scalar(-0.5).mul(
-            tf.squaredDifference(x.div(sigma), mu.div(sigma))
+            tf.squaredDifference(x.div(std), mu.div(std))
         )
-        const logNormalization = tf.scalar(0.5 * Math.log(2 * Math.PI)).add(tf.log(sigma))
+        const logNormalization = tf.scalar(0.5 * Math.log(2 * Math.PI)).add(tf.log(std))
     
         return logUnnormalized.sub(logNormalization)
+    }
+
+    /**
+     * Gaussian likelihood.
+     * Translated from https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/tf1/sac/core.py#L24
+     * 
+     * @param {Tensor} x - sample from normal distribution with mean `mu` and std `exp(logStd)`
+     * @param {Tensor} mu - mean
+     * @param {Tensor} logStd - log of standart deviation
+     * @returns {Tensor} log probability
+     */
+    _gaussianLikelihood(x, mu, logStd) {
+        // pre_sum = -0.5 * (
+        //     ((x-mu)/(tf.exp(log_std)+EPS))**2 
+        //     + 2*log_std 
+        //     + np.log(2*np.pi)
+        // )
+
+        const preSum = tf.scalar(-0.5).mul(
+            x.sub(mu).div(
+                tf.exp(logStd).add(tf.scalar(EPSILON))
+            ).square() // pow(tf.scalar(2).toInt()) ?
+            .add(tf.scalar(2).mul(logStd))
+            .add(tf.scalar(Math.log(2 * Math.PI)))
+        )
+
+        return tf.sum(preSum, 1, true)
+    }
+
+    /**
+     * Adjustment to log probability when squashing action with tanh
+     * Translated from https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/tf1/sac/core.py#L48
+     * 
+     * @param {*} pi - policy sample
+     * @param {*} mu - mean
+     * @param {*} logPi - log probability
+     * @returns {{ pi, mu, logPi }} squashed and adjasted input
+     */
+    _applySquashing(pi, mu, logPi) {
+        // logp_pi -= tf.reduce_sum(2*(np.log(2) - pi - tf.nn.softplus(-2*pi)), axis=1)
+
+        const adj = tf.scalar(2).mul(
+            tf.scalar(Math.log(2))
+            .sub(pi)
+            .sub(tf.softplus(
+                tf.scalar(-2).mul(pi)
+            ))
+        )
+
+        logPi = logPi.sub(tf.sum(adj, 1, true))
+        mu = tf.tanh(mu)
+        pi = tf.tanh(pi)
+
+        return { pi, mu, logPi }
     }
 
     /**
@@ -257,10 +322,10 @@ class AgentSac {
         let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
         outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
 
-        const mu =    tf.layers.dense({units: this._nActions}).apply(outputs)
-        const sigma = tf.layers.dense({units: this._nActions}).apply(outputs)
+        const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
+        const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
 
-        const model = tf.model({inputs: [this._frameInput, this._telemetryInput], outputs: [mu, sigma], name})
+        const model = tf.model({inputs: [this._frameInput, this._telemetryInput], outputs: [mu, logStd], name})
         model.trainable = trainable
 
         if (this._verbose) {
