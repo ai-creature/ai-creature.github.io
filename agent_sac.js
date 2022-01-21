@@ -24,8 +24,8 @@ class AgentSac {
         batchSize = 1, 
         frameShape = [64, 128, 3], 
         nFrames = 4, // Number of stacked frames per state
-        nActions = 9, // 3 impulses, 3 rotations, rgb color
-        nTelemetry = 9, // 3 linear valocity, 3 angular velocity, collision point
+        nActions = 10, // 3 - impuls, 4 - quaternion rotation, 3 - RGB color
+        nTelemetry = 7, // 3 - linear valocity, 3 - collision point, 1 - lidar (tanh of distance)
         // epsilon = 1e-6, // Small number
         alpha = 0.5, // Entropy scale (α)
         gamma = 0.99, // Discount factor (γ)
