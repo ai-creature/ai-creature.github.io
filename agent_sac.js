@@ -25,7 +25,7 @@ class AgentSac {
         frameShape = [64, 128, 3], 
         nFrames = 4, // Number of stacked frames per state
         nActions = 10, // 3 - impuls, 4 - quaternion rotation, 3 - RGB color
-        nTelemetry = 7, // 3 - linear valocity, 3 - collision point, 1 - lidar (tanh of distance)
+        nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
         // epsilon = 1e-6, // Small number
         alpha = 0.5, // Entropy scale (α)
         gamma = 0.99, // Discount factor (γ)
