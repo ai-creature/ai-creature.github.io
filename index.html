@@ -86,16 +86,17 @@
             window.sceneToRender = null;
 
             const agent = new AgentSac({trainable: false, verbose: false})
-            const canvas = document.getElementById("renderCanvas");
-            const createDefaultEngine = function() { 
-                return new BABYLON.Engine(canvas, true, {
-                    preserveDrawingBuffer: true, 
-                    stencil: true,  
-                    disableWebGL2Support: false
-                }); 
-            };
 
-            const createScene = async function () {
+            const canvas = document.getElementById("renderCanvas");
+            const createDefaultEngine = () => new BABYLON.Engine(canvas, true, {
+                preserveDrawingBuffer: true, 
+                stencil: true,
+                disableWebGL2Support: false
+            })
+
+            const createScene = async () => {
+                await agent.init()
+
                 // This creates a basic Babylon Scene object (non-mesh)
                 const scene = new BABYLON.Scene(engine);
 
@@ -292,6 +293,8 @@
 
                 let prevLinearVelocity = BABYLON.Vector3.Zero()
 
+                let globalReward = 0
+
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
                     if (Date.now() < start || busy) return
                     const delta = (Date.now() - (start - frameEvery)) / 1000 // sec
@@ -362,9 +365,12 @@
                                 // reward = +1
                                 print('reward COMBO!!! ', maxCombo)
                             }
+                            reward = +1
                         }
 
-                        print('reward: ', reward, maxCombo)
+                        globalReward += reward
+
+                        print('reward: ', reward, maxCombo, globalReward)
 
                         collision = BABYLON.Vector3.Zero() // reset collision point
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
