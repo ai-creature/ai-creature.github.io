@@ -29,6 +29,7 @@ const AgentSac = (() => {
         Q2: 'q2',        
         Q1_TARGET: 'q1-target',
         Q2_TARGET: 'q2-target',
+        ALPHA: 'alpha'
     }
 
     return class AgentSac {
@@ -38,7 +39,6 @@ const AgentSac = (() => {
             nFrames = 4, // Number of stacked frames per state
             nActions = 10, // 3 - impuls, 4 - quaternion rotation, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
-            alpha = 0.1, // Entropy scale (α)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
             trainable = true, // Whether the actor is trainable
@@ -49,7 +49,6 @@ const AgentSac = (() => {
             this._nFrames = nFrames
             this._nActions = nActions
             this._nTelemetry = nTelemetry
-            this._alpha = alpha
             this._gamma = gamma
             this._tau = tau
             this._trainable = trainable
@@ -59,7 +58,6 @@ const AgentSac = (() => {
 
             // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
             this._targetEntropy = -nActions 
-            this._logAlpha = tf.variable(tf.scalar(-0.5), true, 'logAlpha')
         }
 
         /**
@@ -87,6 +85,7 @@ const AgentSac = (() => {
             this.q1Targ = await this._getCritic(NAME.Q1_TARGET, false)
             this.q2Targ = await this._getCritic(NAME.Q2_TARGET, false)
 
+            this._logAlpha = await this._getAlpha(NAME.ALPHA)
             this.alphaOptimizer = tf.train.adam()
 
             this.updateTargets(1)
@@ -442,6 +441,34 @@ const AgentSac = (() => {
         }
 
         /**
+         * Builds a log of entropy scale (α) for training.
+         * 
+         * @param {string} name 
+         * @returns {tf.Variable} trainable variable for log entropy
+         */
+        async _getAlpha(name = 'alpha') {
+            let logAlpha = 0.0
+
+            const checkpoint = await this._loadCheckpoint(name)
+            if (checkpoint) {
+                logAlpha = checkpoint.getWeights()[0].arraySync()[0][0]
+
+                if (this._verbose)
+                    print('Checkpoint alpha: ', checkpoint.getWeights()[0].arraySync()[0][0])
+                    
+                this._logAlphaPlaceholder = checkpoint
+            } else {
+                const model = tf.sequential({ name });
+                model.add(tf.layers.dense({ units: 1, inputShape: [1], useBias: false }))
+                model.setWeights([tf.tensor([logAlpha], [1, 1])])
+
+                this._logAlphaPlaceholder = model
+            }
+
+            return tf.variable(tf.scalar(logAlpha), true, name) // true -> trainable
+        }
+
+        /**
          * Builds convolutional part of a network.
          * 
          * @param {Tensor} inputs - input for the conv layers
@@ -484,12 +511,15 @@ const AgentSac = (() => {
          async checkpoint() {
             if (!this._trainable) throw new Error('(╭ರ_ ⊙ )')
 
+            this._logAlphaPlaceholder.setWeights([tf.tensor([this._logAlpha.arraySync()], [1, 1])])
+
             await Promise.all([
                 this._saveCheckpoint(this.actor),
                 this._saveCheckpoint(this.q1),
                 this._saveCheckpoint(this.q2),
                 this._saveCheckpoint(this.q1Targ),
-                this._saveCheckpoint(this.q2Targ)
+                this._saveCheckpoint(this.q2Targ),
+                this._saveCheckpoint(this._logAlphaPlaceholder)
             ])
 
             if (this._verbose) 
@@ -506,7 +536,7 @@ const AgentSac = (() => {
             const saveResults = await model.save(key)
 
             if (this._verbose) 
-                print('Checkpoint saveResults: ', saveResults)
+                print('Checkpoint saveResults', model.name, saveResults)
         }
 
         /**
@@ -516,9 +546,10 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
+// return
             const key = this._getChKey(name)
             const modelsInfo = await tf.io.listModels()
-print(modelsInfo)
+
             if (key in modelsInfo) {
                 const model = await tf.loadLayersModel(key)
 
