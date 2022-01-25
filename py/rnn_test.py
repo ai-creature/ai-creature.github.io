@@ -1,6 +1,25 @@
 import numpy as np
 import tensorflow as tf
 from random import randrange
+import tensorflow_probability as tfp
+
+
+
+_log_alpha = tf.Variable(0.0)
+_alpha = tfp.util.DeferredTensor(_log_alpha, tf.exp)
+
+print('just alpha = ', _alpha.numpy())
+print('conv alpha = ', tf.convert_to_tensor(_alpha))
+
+
+
+import gym
+from gym import spaces
+
+action_space = spaces.Box( np.array([-1,-1,-1]), np.array([+1,+1,+1]))  # steer, gas, brake
+print(-np.prod(action_space.shape))
+
+
 
 batch_size = 1
 timesteps = 1

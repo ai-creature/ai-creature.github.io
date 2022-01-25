@@ -289,7 +289,7 @@
                 let stateId = 0
 
                 let rewardCombo = 0
-                let maxCombo = 0
+                let maxCombo = 5
 
                 let prevLinearVelocity = BABYLON.Vector3.Zero()
 
@@ -357,15 +357,14 @@
                         let reward = 0
                         if (collision.x || collision.y || collision.z) {
                             rewardCombo = 0
-                            reward = -1
+                            reward = -10
                         } else {
                             rewardCombo++
                             if (rewardCombo > maxCombo) {
                                 maxCombo = rewardCombo
-                                // reward = +1
                                 print('reward COMBO!!! ', maxCombo)
                             }
-                            reward = +1
+                            reward = 1
                         }
 
                         globalReward += reward

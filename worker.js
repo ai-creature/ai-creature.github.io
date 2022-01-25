@@ -5,10 +5,10 @@ importScripts('reply_buffer.js')
 ;(async () => {
     const print = (...args) => console.log(...args)
 
-    const agent = new AgentSac({batchSize: 3, verbose: true})
+    const agent = new AgentSac({batchSize: 100, verbose: true})
     await agent.init()
 
-    const rb = new ReplyBuffer(200, ({ state: [frame, telemetry], action, reward }) => {
+    const rb = new ReplyBuffer(1000, ({ state: [frame, telemetry], action, reward }) => {
         frame.dispose()
         telemetry.dispose()
         action.dispose()
@@ -24,7 +24,7 @@ importScripts('reply_buffer.js')
      */
     const job = async () => {
         if (DISABLED) return 99999
-        if (rb.size < 20) return 1000
+        // if (rb.size < 500) return 1000
     
         const samples = rb.sample(agent._batchSize)
         if (!samples.length) return 1000
@@ -52,7 +52,7 @@ importScripts('reply_buffer.js')
         }
     
         tf.tidy(() => {
-            agent.learn({
+            agent.train({
                 state: [tf.stack(frames), tf.stack(telemetries)], 
                 action: tf.stack(actions), 
                 reward: tf.stack(rewards), 
