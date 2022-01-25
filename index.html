@@ -357,19 +357,19 @@
                         let reward = 0
                         if (collision.x || collision.y || collision.z) {
                             rewardCombo = 0
-                            reward = -10
+                            reward = -10000
                         } else {
                             rewardCombo++
                             if (rewardCombo > maxCombo) {
                                 maxCombo = rewardCombo
                                 print('reward COMBO!!! ', maxCombo)
                             }
-                            reward = 1
+                            reward = 100
                         }
 
                         globalReward += reward
 
-                        print('reward: ', reward, maxCombo, globalReward)
+                        print('reward: ', reward, maxCombo, rewardCombo, globalReward)
 
                         collision = BABYLON.Vector3.Zero() // reset collision point
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])

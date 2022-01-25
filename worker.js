@@ -7,6 +7,7 @@ importScripts('reply_buffer.js')
 
     const agent = new AgentSac({batchSize: 100, verbose: true})
     await agent.init()
+    await agent.checkpoint() // overwrite
 
     const rb = new ReplyBuffer(1000, ({ state: [frame, telemetry], action, reward }) => {
         frame.dispose()
@@ -73,7 +74,7 @@ importScripts('reply_buffer.js')
             setTimeout(tick, await job())
         } catch (e) {
             console.error(e)
-            setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
+            // setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
         }
     }
     

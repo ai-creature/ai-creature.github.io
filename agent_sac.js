@@ -42,7 +42,9 @@ const AgentSac = (() => {
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
             trainable = true, // Whether the actor is trainable
-            verbose = false
+            verbose = false,
+            forced = false, // force to create fresh models (not from checkpoint)
+            prefix = '' // for tests
         } = {}) {
             this._batchSize = batchSize
             this._frameShape = frameShape 
@@ -53,6 +55,9 @@ const AgentSac = (() => {
             this._tau = tau
             this._trainable = trainable
             this._verbose = verbose
+            this._inited = false
+            this._prefix = (prefix === '' ? '' : prefix + '-')
+            this._forced = forced
             
             this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
@@ -64,10 +69,12 @@ const AgentSac = (() => {
          * Initialization.
          */
         async init() {
+            if (this._inited) throw Error('щ（ﾟДﾟщ）')
+
             this._frameInput = tf.input({batchShape : [null, ...this._frameStackShape]})
             this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]})
             
-            this.actor = await this._getActor(NAME.ACTOR, this.trainable)
+            this.actor = await this._getActor(this._prefix + NAME.ACTOR, this.trainable)
             
             if (!this._trainable)
                 return
@@ -76,19 +83,21 @@ const AgentSac = (() => {
 
             this._actionInput = tf.input({batchShape : [null, this._nActions]})
 
-            this.q1 = await this._getCritic(NAME.Q1)
+            this.q1 = await this._getCritic(this._prefix + NAME.Q1)
             this.q1Optimizer = tf.train.adam()
 
-            this.q2 = await this._getCritic(NAME.Q2)
+            this.q2 = await this._getCritic(this._prefix + NAME.Q2)
             this.q2Optimizer = tf.train.adam()
 
-            this.q1Targ = await this._getCritic(NAME.Q1_TARGET, false)
-            this.q2Targ = await this._getCritic(NAME.Q2_TARGET, false)
+            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, false)
+            this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, false)
 
-            this._logAlpha = await this._getAlpha(NAME.ALPHA)
+            this._logAlpha = await this._getAlpha(this._prefix + NAME.ALPHA)
             this.alphaOptimizer = tf.train.adam()
 
             this.updateTargets(1)
+
+            this._inited = true
         }
 
         /**
@@ -281,17 +290,6 @@ const AgentSac = (() => {
 
                 if (!withLogProbs)
                     return pi
-
-                // const logProb = this._logProb(pi, mu, std)
-
-                // // Enforcing Action Bound
-                // const logProbBounded = logProb.sub(
-                //   tf.log(
-                //     tf.scalar(1)
-                //       .sub(action.pow(tf.scalar(2).toInt()))
-                //       .add(EPSILON)
-                //   )
-                // ).sum(1, true) // TODO: figure out why we sum log_probs together with squash_correction
         
                 return [pi, logPi]
             })
@@ -334,7 +332,7 @@ const AgentSac = (() => {
             const preSum = tf.scalar(-0.5).mul(
                 x.sub(mu).div(
                     tf.exp(logStd).add(tf.scalar(EPSILON))
-                ).pow(tf.scalar(2).toInt()) // .square() ???
+                ).square()
                 .add(tf.scalar(2).mul(logStd))
                 .add(tf.scalar(Math.log(2 * Math.PI)))
             )
@@ -386,7 +384,7 @@ const AgentSac = (() => {
             const concatOutput = tf.layers.concatenate().apply([convOutputs, this._telemetryInput])
 */
             let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(this._telemetryInput)
-            outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
+            outputs     = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
@@ -422,7 +420,7 @@ const AgentSac = (() => {
             const concatOutput = tf.layers.concatenate().apply([/*convOutputs, */this._telemetryInput, this._actionInput])
 
             let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
-            outputs = tf.layers.dense({units: 64 , activation: 'relu'}).apply(outputs)
+            outputs     = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
 
@@ -465,7 +463,7 @@ const AgentSac = (() => {
                 this._logAlphaPlaceholder = model
             }
 
-            return tf.variable(tf.scalar(logAlpha), true, name) // true -> trainable
+            return tf.variable(tf.scalar(logAlpha), true) // true -> trainable
         }
 
         /**
@@ -546,7 +544,11 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
-// return
+            if (this._forced) {
+                print('Forced to not load from the checkpoint ' + name)
+                return
+            }
+
             const key = this._getChKey(name)
             const modelsInfo = await tf.io.listModels()
 
@@ -562,7 +564,7 @@ const AgentSac = (() => {
             if (this._verbose) 
                 print('Checkpoint not found for ' + name)
         }
-
+        
         /**
          * Builds the key for the model weights in LocalStorage.
          * 
@@ -573,4 +575,127 @@ const AgentSac = (() => {
             return 'indexeddb://' + name + '-' + VERSION
         }
     }
+})()
+
+/* TESTS */
+;(async () => {
+    return 
+
+    const print = (...args) => console.log(...args)
+
+    // https://www.wolframalpha.com/input/?i2d=true&i=y%5C%2840%29x%5C%2844%29+%CE%BC%5C%2844%29+%CF%83%5C%2841%29+%3D+ln%5C%2840%29Divide%5B1%2CSqrt%5B2*%CF%80*Power%5B%CF%83%2C2%5D%5D%5D*Exp%5B-Divide%5B1%2C2%5D*%5C%2840%29Divide%5BPower%5B%5C%2840%29x-%CE%BC%5C%2841%29%2C2%5D%2CPower%5B%CF%83%2C2%5D%5D%5C%2841%29%5D%5C%2841%29
+    ;(() => {
+        const agent = new AgentSac()
+
+        const 
+            mu = tf.tensor([0], [1, 1]),     // mu = 0
+            logStd = tf.tensor([0], [1, 1]), // logStd = 0
+            std = tf.exp(logStd),            // std = 1
+            normal = tf.tensor([0], [1, 1]), // N = 0
+            pi = mu.add(std.mul(normal))     // x = 0
+    
+        const log = agent._gaussianLikelihood(pi, mu, logStd)
+
+        console.assert(log.arraySync()[0][0].toFixed(5) === '-0.91894', 
+            'test Gaussian Likelihood for μ=0, σ=1, x=0')
+    })()
+
+    ;(() => {
+        const agent = new AgentSac()
+
+        const 
+            mu = tf.tensor([1], [1, 1]),     // mu = 1
+            logStd = tf.tensor([1], [1, 1]), // logStd = 1
+            std = tf.exp(logStd),            // std = e
+            normal = tf.tensor([0], [1, 1]), // N = 0
+            pi = mu.add(std.mul(normal))    // x = 1
+    
+        const log = agent._gaussianLikelihood(pi, mu, logStd)
+
+        console.assert(log.arraySync()[0][0].toFixed(5) === '-1.91894',
+            'test Gaussian Likelihood for μ=1, σ=e, x=0')
+    })()
+
+    ;(() => {
+        const agent = new AgentSac()
+
+        const 
+            mu = tf.tensor([1], [1, 1]),     // mu = -1
+            logStd = tf.tensor([1], [1, 1]), // logStd = 1
+            std = tf.exp(logStd),            // std = e
+            normal = tf.tensor([0.1], [1, 1]), // N = 0
+            pi = mu.add(std.mul(normal))    // x = -1.27182818
+    
+        const logPi = agent._gaussianLikelihood(pi, mu, logStd)
+        const { pi: piSquashed, logPi: logPiSquashed } = agent._applySquashing(pi, mu, logPi)
+
+        const logProbBounded = logPi.sub(
+          tf.log(
+            tf.scalar(1)
+              .sub(tf.tanh(pi).pow(tf.scalar(2)))
+              // .add(EPSILON)
+          )
+        ).sum(1, true)
+        
+        console.assert(logPi.arraySync()[0][0].toFixed(5) === '-1.92394',
+            'test Gaussian Likelihood for μ=-1, σ=e, x=-1.27182818')
+
+        console.assert(logPiSquashed.arraySync()[0][0].toFixed(5) === logProbBounded.arraySync()[0][0].toFixed(5),
+            'test logPiSquashed for μ=-1, σ=e, x=-1.27182818')
+
+        console.assert(piSquashed.arraySync()[0][0].toFixed(5) === tf.tanh(pi).arraySync()[0][0].toFixed(5),
+            'test piSquashed for μ=-1, σ=e, x=-1.27182818')
+    })()
+
+    await (async () => {
+        const state = tf.tensor([
+            0.5, 0.3, -0.9,
+            0, -0.8, 1,
+            -0.3, 0.04, 0.02,
+            0.9
+        ], [1, 10])
+
+        const action = tf.tensor([
+            0.1, -1, -0.4,
+            1, -0.8, -0.8, -0.2,
+            0.04, 0.02, 0.001
+        ], [1, 10])
+        
+        const fresh = new AgentSac({ prefix: 'test', forced: true })
+        await fresh.init()
+        await fresh.checkpoint()
+        
+        const saved = new AgentSac({ prefix: 'test' })
+        await saved.init()
+        
+        let frPred, saPred
+
+        frPred = fresh.actor.predict(state, {batchSize: 1})
+        saPred = saved.actor.predict(state, {batchSize: 1})
+        console.assert(
+            frPred[0].arraySync().length > 0 &&
+            frPred[1].arraySync().length > 0 &&
+            frPred[0].arraySync().join(';') === saPred[0].arraySync().join(';') &&
+            frPred[1].arraySync().join(';') === saPred[1].arraySync().join(';'),
+            'Models loaded from the checkpoint should be the same')
+        
+        frPred = fresh.q1.predict([state, action], {batchSize: 1})
+        saPred = fresh.q1Targ.predict([state, action], {batchSize: 1})
+        console.assert(
+            frPred.arraySync()[0][0] !== undefined &&
+            frPred.arraySync()[0][0] === saPred.arraySync()[0][0],
+            'Q1 and Q1-target should be the same')
+
+        frPred = fresh.q2.predict([state, action], {batchSize: 1})
+        saPred = saved.q2.predict([state, action], {batchSize: 1})
+        console.assert(
+            frPred.arraySync()[0][0] !== undefined &&
+            frPred.arraySync()[0][0] === saPred.arraySync()[0][0],
+            'Q and Q restored should be the same')
+
+        console.assert(
+            fresh._logAlpha.arraySync() !== undefined &&
+            fresh._logAlpha.arraySync() === fresh._logAlpha.arraySync(),
+            'Q and Q restored should be the same')
+    })()
 })()
