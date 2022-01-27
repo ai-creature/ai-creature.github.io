@@ -36,15 +36,16 @@ const AgentSac = (() => {
         constructor({
             batchSize = 1, 
             frameShape = [64, 128, 3], 
-            nFrames = 4, // Number of stacked frames per state
-            nActions = 10, // 3 - impuls, 4 - quaternion rotation, 3 - RGB color
+            nFrames = 2, // Number of stacked frames per state
+            nActions = 6, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
             trainable = true, // Whether the actor is trainable
             verbose = false,
             forced = false, // force to create fresh models (not from checkpoint)
-            prefix = '' // for tests
+            prefix = '', // for tests,
+            sighted = true
         } = {}) {
             this._batchSize = batchSize
             this._frameShape = frameShape 
@@ -58,6 +59,7 @@ const AgentSac = (() => {
             this._inited = false
             this._prefix = (prefix === '' ? '' : prefix + '-')
             this._forced = forced
+            this._sighted = sighted
             
             this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
@@ -89,7 +91,7 @@ const AgentSac = (() => {
             this.q2 = await this._getCritic(this._prefix + NAME.Q2)
             this.q2Optimizer = tf.train.adam()
 
-            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, false)
+            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, false) // true for batch norm
             this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, false)
 
             this._logAlpha = await this._getAlpha(this._prefix + NAME.ALPHA)
@@ -111,12 +113,12 @@ const AgentSac = (() => {
                 throw new Error('Actor is not trainable')
 
             return tf.tidy(() => {
-                assertShape(state[0], [this._batchSize, ...this._frameStackShape], 'frames')
-                assertShape(state[1], [this._batchSize, this._nTelemetry], 'telemetry')
+                assertShape(state[0], [this._batchSize, this._nTelemetry], 'telemetry')
+                assertShape(state[1], [this._batchSize, ...this._frameStackShape], 'frames')
                 assertShape(action, [this._batchSize, this._nActions], 'action')
                 assertShape(reward, [this._batchSize, 1], 'reward')
-                assertShape(nextState[0], [this._batchSize, ...this._frameStackShape], 'nextState frames')
-                assertShape(nextState[1], [this._batchSize, this._nTelemetry], 'nextState telemetry')
+                assertShape(nextState[0], [this._batchSize, this._nTelemetry], 'nextState telemetry')
+                assertShape(nextState[1], [this._batchSize, ...this._frameStackShape], 'nextState frames')
 
                 this._trainCritics({ state, action, reward, nextState })
                 this._trainActor(state)
@@ -134,9 +136,13 @@ const AgentSac = (() => {
         _trainCritics({ state, action, reward, nextState }) {
             const getQLossFunction = (() => {
                 const [nextFreshAction, logPi] = this.sampleAction(nextState, true)
-                
-                const q1TargValue = this.q1Targ.predict([nextState[1], nextFreshAction], {batchSize: this._batchSize})
-                const q2TargValue = this.q2Targ.predict([nextState[1], nextFreshAction], {batchSize: this._batchSize})
+
+                const q1TargValue = this.q1Targ.predict(
+                    this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
+                    {batchSize: this._batchSize})
+                const q2TargValue = this.q2Targ.predict(
+                    this._sighted ? [...nextState, nextFreshAction] : [nextState[0], nextFreshAction], 
+                    {batchSize: this._batchSize})
                 
                 const qTargValue = tf.minimum(q1TargValue, q2TargValue)
     
@@ -154,9 +160,12 @@ const AgentSac = (() => {
                 assertShape(target, [this._batchSize, 1], 'target')
     
                 return (q) => () => {
-                    const qValue = q.predict([state[1], action], {batchSize: this._batchSize})
+                    const qValue = q.predict(
+                        this._sighted ? [...state, action] : [state[0], action],
+                        {batchSize: this._batchSize})
                     
-                    const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
+                    // const loss = tf.scalar(0.5).mul(tf.losses.meanSquaredError(qValue, target))
+                    const loss = tf.scalar(0.5).mul(tf.mean(qValue.sub(target).square()))
                     
                     assertShape(qValue, [this._batchSize, 1], 'qValue')
 
@@ -188,8 +197,12 @@ const AgentSac = (() => {
             const actorLossFunction = () => {
                 const [freshAction, logPi] = this.sampleAction(state, true)
                 
-                const q1Value = this.q1.predict([state[1], freshAction], {batchSize: this._batchSize})
-                const q2Value = this.q2.predict([state[1], freshAction], {batchSize: this._batchSize})
+                const q1Value = this.q1.predict(
+                    this._sighted ? [...state, freshAction] : [state[0], freshAction],
+                    {batchSize: this._batchSize})
+                const q2Value = this.q2.predict(
+                    this._sighted ? [...state, freshAction] : [state[0], freshAction], 
+                    {batchSize: this._batchSize})
                 
                 const criticValue = tf.minimum(q1Value, q2Value)
 
@@ -249,7 +262,7 @@ const AgentSac = (() => {
                 q1WTarg = this.q1Targ.getWeights(),
                 q2WTarg = this.q2Targ.getWeights(),
                 len = q1W.length
-            
+            // print(q1W, q1WTarg)
             const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
             
             const w1 = [], w2 = []
@@ -271,7 +284,7 @@ const AgentSac = (() => {
          */
         sampleAction(state, withLogProbs = false) { // timer ~3ms
             return tf.tidy(() => {
-                let [ mu, logStd ] = this.actor.predict(state[1], {batchSize: this._batchSize})
+                let [ mu, logStd ] = this.actor.predict(this._sighted ? state : state[0], {batchSize: this._batchSize})
 
                 // https://github.com/rail-berkeley/rlkit/blob/c81509d982b4d52a6239e7bfe7d2540e3d3cd986/rlkit/torch/sac/policies/gaussian_policy.py#L106
                 logStd = tf.clipByValue(logStd, LOG_STD_MIN, LOG_STD_MAX) 
@@ -377,19 +390,23 @@ const AgentSac = (() => {
         async _getActor(name = 'actor', trainable = true) {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
-/*
-            let convOutputs = this._getConvEncoder(this._frameInput)
-            convOutputs = tf.layers.flatten().apply(convOutputs)
 
-            const concatOutput = tf.layers.concatenate().apply([convOutputs, this._telemetryInput])
-*/
-            let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(this._telemetryInput)
-            outputs     = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
+            let concatOutput = this._telemetryInput
+
+            if (this._sighted) {
+                let convOutputs = this._getConvEncoder(this._frameInput)
+                convOutputs = tf.layers.flatten().apply(convOutputs)
+
+                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, convOutputs])
+            }
+
+            let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(concatOutput)
+            outputs     = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
 
-            const model = tf.model({inputs: [/*this._frameInput, */this._telemetryInput], outputs: [mu, logStd], name})
+            const model = tf.model({inputs: this._sighted ? [this._telemetryInput, this._frameInput] : [this._telemetryInput], outputs: [mu, logStd], name})
             model.trainable = trainable
 
             if (this._verbose) {
@@ -414,17 +431,27 @@ const AgentSac = (() => {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            // let convOutputs = this._getConvEncoder(this._frameInput)
-            // convOutputs = tf.layers.flatten().apply(convOutputs)
+            let concatOutput
+            if (this._sighted) {
+                let convOutputs = this._getConvEncoder(this._frameInput)
+                convOutputs = tf.layers.flatten().apply(convOutputs)
+                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, convOutputs, this._actionInput])
+            } else {
+                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
+            }
 
-            const concatOutput = tf.layers.concatenate().apply([/*convOutputs, */this._telemetryInput, this._actionInput])
-
-            let outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(concatOutput)
-            outputs     = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
+            let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(concatOutput)
+            outputs     = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
 
-            const model = tf.model({inputs: [/*this._frameInput,*/ this._telemetryInput, this._actionInput], outputs, name})
+            const model = tf.model({
+                inputs: this._sighted 
+                    ? [this._telemetryInput, this._frameInput,  this._actionInput] 
+                    : [this._telemetryInput, this._actionInput],
+                outputs, name
+            })
+
             model.trainable = trainable
 
             if (this._verbose) {
@@ -452,7 +479,7 @@ const AgentSac = (() => {
                 logAlpha = checkpoint.getWeights()[0].arraySync()[0][0]
 
                 if (this._verbose)
-                    print('Checkpoint alpha: ', checkpoint.getWeights()[0].arraySync()[0][0])
+                    print('Checkpoint alpha: ', logAlpha)
                     
                 this._logAlphaPlaceholder = checkpoint
             } else {
@@ -473,34 +500,69 @@ const AgentSac = (() => {
          * @returns outputs
          */
         _getConvEncoder(inputs) {
-            const kernelSize = [3, 3]
-            const poolSize = 2
-            const strides = 1
+            const kernelSize = 3
             const padding = 'same'
-            const layers = 13
-            
-            let filterPow = 3
+            const poolSize = 4
+            const strides = 1
+
             let outputs = inputs
-            
-            for (let i = 0; i < layers; i++) {
-                if (i%3 == 1) 
-                    filterPow++
-        
-                outputs = tf.layers.conv2d({
-                    filters: 2**filterPow,
-                    kernelSize,
-                    strides,
-                    padding,
-                    activation: 'relu',
-                    kernelInitializer: 'heNormal',
-                    biasInitializer: 'heNormal'
-                }).apply(outputs)
-            
-                if (i%2 == 1) 
-                    outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            }
-        
+
+            outputs = tf.layers.conv2d({
+                filters: 32,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
+            outputs = tf.layers.conv2d({
+                filters: 32,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
+            outputs = tf.layers.conv2d({
+                filters: 32,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
             return outputs
+
+            // const layers = 13
+            
+            // let filterPow = 3
+            // let outputs = inputs
+            
+            // for (let i = 0; i < layers; i++) {
+            //     if (i%3 == 1) 
+            //         filterPow++
+        
+            //     outputs = tf.layers.conv2d({
+            //         filters: 2**filterPow,
+            //         kernelSize,
+            //         strides,
+            //         padding,
+            //         activation: 'relu',
+            //         kernelInitializer: 'heNormal',
+            //         biasInitializer: 'heNormal'
+            //     }).apply(outputs)
+            
+            //     if (i%2 == 1) 
+            //         outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            // }
+        
+            // return outputs
         }
 
         /**

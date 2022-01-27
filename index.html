@@ -165,28 +165,26 @@
                 }, scene);
                 
                 BABYLON.ParticleHelper.SnippetUrl = "3d/snippet";
-
                 // Sparks
                 creature.sparks = await BABYLON.ParticleHelper.CreateFromSnippetAsync("UY098C-3.json", scene, false);
                 creature.sparks.emitter = creature;
-                
                 // Core
                 creature.glow = await BABYLON.ParticleHelper.CreateFromSnippetAsync("EXUQ7M-5.json", scene, false);
                 creature.glow.emitter = creature;
 
 
                 /* CREATURE's CAMERA */
-                // const crCameraMesh = BABYLON.MeshBuilder.CreateSphere("cr_camera_mesh", {diameter: 1, segments: 32}, scene);
-                // crCameraMesh.setParent(creature)
-                // crCameraMesh.isVisible = 0
-
-                const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(1, 0, 0), scene)
+                const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(0, 2, 0), scene)
                 crCamera.parent = creature
-                crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
+                // crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
+                // const crCameraMesh = BABYLON.MeshBuilder.CreateSphere("cr_camera_mesh", {diameter: 1, segments: 32}, scene);
+                // crCameraMesh.parent = crCamera
+                // crCameraMesh.isVisible = 1
+
 
                 /* CLIENT */
                 const client = BABYLON.MeshBuilder.CreateSphere("client", {diameter: 3, segments: 32}, scene);
-                client.setParent(camera);
+                client.parent = camera
                 client.position = new BABYLON.Vector3(0, -12,0)
 
                 const clMat = new BABYLON.StandardMaterial("cl_mat", scene)
@@ -280,7 +278,7 @@
                 })
                 const TRANSITIONS_BUFFER_SIZE = 2
                 const scalar255 = tf.scalar(255)
-                const frameEvery = 1000/24 // ~41ms ~24frames/sec
+                const frameEvery = 1000/20 // ~41ms ~24frames/sec
                 const frameStack = []
                 const transitions = []
 
@@ -294,6 +292,12 @@
                 let prevLinearVelocity = BABYLON.Vector3.Zero()
 
                 let globalReward = 0
+
+
+
+
+                
+                let testLines;
 
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
                     if (Date.now() < start || busy) return
@@ -331,7 +335,6 @@
 
                         const linearVelocity = creature.impostor.getLinearVelocity().normalize()
                         const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
-                        prevLinearVelocity = linearVelocity
 
                         const ray = new BABYLON.Ray(creature.position, linearVelocity)
                         const hit = scene.pickWithRay(ray)
@@ -357,14 +360,14 @@
                         let reward = 0
                         if (collision.x || collision.y || collision.z) {
                             rewardCombo = 0
-                            reward = -10000
+                            reward = -100
                         } else {
                             rewardCombo++
                             if (rewardCombo > maxCombo) {
                                 maxCombo = rewardCombo
                                 print('reward COMBO!!! ', maxCombo)
                             }
-                            reward = 100
+                            reward = 1
                         }
 
                         globalReward += reward
@@ -380,34 +383,100 @@
                         print('tel collision:      ', telemetry.slice(6,9))
                         print('tel lidar:          ', lidar)
 
-                        const action = agent.sampleAction([framesBatch, telemetryBatch]) // timer ~5ms
+                        const action = agent.sampleAction([telemetryBatch, framesBatch]) // timer ~5ms
                         // TODO: find the way to avoid framesNorm.array()
                         const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
                         
                         const 
-                            impulse = actionArr.slice(0, 3).map(v => v),
-                            rotation = actionArr.slice(3, 7).map(el => el),
-                            color = actionArr.slice(7, 10) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
+                            impulse = actionArr.slice(0, 3).map(v => v), //[0,-0.1, 0], //    
+                            //rotation = actionArr.slice(3, 7).map(el => el),
+                            color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
                         
-                        console.assert(actionArr.length === 10)
+                        console.assert(actionArr.length === 6, actionArr.length)
                         console.assert(impulse.length === 3)
-                        console.assert(rotation.length === 4)
+                        // console.assert(rotation.length === 4)
                         console.assert(color.length === 3)
 
-                        creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case
+                        creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
                         creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), BABYLON.Vector3.Zero()) // contact point zero
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
-                        creature.rotationQuaternion = new BABYLON.Quaternion(...rotation)
                         creature.glow.color2 = new BABYLON.Color4(...color)
+                        
+                        // after applyImpulse the linear velocity is recalculated right away
+                        const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
+                        prevLinearVelocity = newLinearVelocity
+
+                        // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
+                        creature.lookAt(creature.position.add(newLinearVelocity))
+
+                        // var orientation = BABYLON.Vector3.RotationFromAxis(
+                        //     new BABYLON.Vector3(linvel[0], 0, 0),
+                        //     new BABYLON.Vector3(0, linvel[1], 0),
+                        //     new BABYLON.Vector3(0, 0, linvel[2])
+                        // );
+                        // creature.rotate(orientation);
+
+
+
+                        // print('linvel after', creature.impostor.getLinearVelocity().normalize())
+
+
+// const linearVelocity = creature.impostor.getLinearVelocity().normalize()
+                        // rocket.lookAt(direction);
+                        // creature.lookAt(new BABYLON.Vector3(...impulse), 0, 0, 0, BABYLON.Space.LOCAL);
+                        // creature.rotate(new BABYLON.Vector3(...impulse));
+                        // creature.rotate(new BABYLON.Vector3(1, 0 ,0), Math.PI/2);
+
+                        // testLine.setDirection(new BABYLON.Vector3(...impulse))
+
+
+                        // ;(testLines && testLines.dispose())
+
+                        // const testDir = new BABYLON.Vector3(...impulse).scale(500);
+                        // testLines = BABYLON.MeshBuilder.CreateLines("lines", {points: [BABYLON.Vector3.Zero(), testDir]}, scene); 
+                        // testLines.parent = creature
+                        // testLines.color = new BABYLON.Color3(0, 1, 0);
+
+                        // creature.lookAt(new BABYLON.Vector3(...impulse), 0, 0, 0, BABYLON.Space.LOCAL);
+                        // creature.rotate(new BABYLON.Vector3(...impulse));
+                        // creature.rotate(new BABYLON.Vector3(1, 0 ,0), Math.PI/2);
+                        
+                        
+                        // var xx = BABYLON.Vector3.GetAngleBetweenVectors(
+                        //     new BABYLON.Vector3(...impulse), 
+                        //     crCamera.position, 
+                        //     new BABYLON.Vector3(1,0,0)
+                        // )
+                        // var yy = BABYLON.Vector3.GetAngleBetweenVectors(
+                        //     new BABYLON.Vector3(...impulse), 
+                        //     crCamera.position, 
+                        //     new BABYLON.Vector3(0,1,0)
+                        // )
+                        // var zz = BABYLON.Vector3.GetAngleBetweenVectors(
+                        //     new BABYLON.Vector3(...impulse), 
+                        //     crCamera.position, 
+                        //     new BABYLON.Vector3(0,0,1)
+                        // )
+                        // console.log('rotat', crCamera.absolutePosition)
+
+                        // creature.addRotation(xx,yy,zz) //= new BABYLON.Vector3(xx,yy,zz);
+
+
+                        // axis1 = (sphere1.position).subtract(sphere2.position);
+                        // axis3 = BABYLON.Vector3.Cross(camera.position, axis1);
+                        // axis2 = BABYLON.Vector3.Cross(axis3, axis1);
+
+
+                        // creature.rotation = new BABYLON.Vector3(...impulse)
 
                         // creature.impostor.applyImpulse(new BABYLON.Vector3(0,0,-0.01), BABYLON.Vector3.Zero())
-                        //creature.moveWithCollisions(new BABYLON.Vector3(0,-0.1,0))
+                        // creature.moveWithCollisions(new BABYLON.Vector3(0,-0.1,0))
                         // creature.impostor.setLinearVelocity(new BABYLON.Vector3(...impulse));
                         // creature.impostor.setAngularVelocity(new BABYLON.Quaternion(...rotation, 0));
 
                         transitions.push({
                             id: stateId++, 
-                            state: [framesArr, telemetry], // 20ms vs 50ms || size 200kb vs 1.5mb
+                            state: [telemetry, framesArr], // 20ms vs 50ms || size 200kb vs 1.5mb
                             action: actionArr,
                             reward
                         })
@@ -428,26 +497,26 @@
                         telemetryBatch.dispose()
                         action.dispose()
 
-                        // if (stateId%10 == 0)
-                        //     frameStack.forEach((base64Data, i) => {
-                        //         const img = new Image()
-                        //         img.onload = () => document.getElementById('testCanvas' + i)
-                        //             .getContext('2d')
-                        //             .drawImage(img, 0, 0, 256, 128)
-                        //         img.src = base64Data
-                        //     })
+                        if (stateId%1 == 0)
+                            frameStack.forEach((base64Data, i) => {
+                                const img = new Image()
+                                img.onload = () => document.getElementById('testCanvas' + (i+2))
+                                    .getContext('2d')
+                                    .drawImage(img, 0, 0, 256, 128)
+                                img.src = base64Data
+                            })
 
                         frameStack.length = 0 // I will regret about this :D
                     }
 
                     /* Creature's POV */
-                    ;(() => {
-                        const img = new Image()
-                        img.onload = () => document.getElementById('testCanvas3')
-                            .getContext('2d')
-                            .drawImage(img, 0, 0, 256, 128)
-                        img.src = base64Data
-                    })()
+                    // ;(() => {
+                    //     const img = new Image()
+                    //     img.onload = () => document.getElementById('testCanvas3')
+                    //         .getContext('2d')
+                    //         .drawImage(img, 0, 0, 256, 128)
+                    //     img.src = base64Data
+                    // })()
 
                     //mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                     

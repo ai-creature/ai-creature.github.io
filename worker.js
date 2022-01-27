@@ -5,11 +5,12 @@ importScripts('reply_buffer.js')
 ;(async () => {
     const print = (...args) => console.log(...args)
 
-    const agent = new AgentSac({batchSize: 100, verbose: true})
+    const agent = new AgentSac({batchSize: 10, verbose: true})
     await agent.init()
     await agent.checkpoint() // overwrite
+    self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
 
-    const rb = new ReplyBuffer(1000, ({ state: [frame, telemetry], action, reward }) => {
+    const rb = new ReplyBuffer(1000, ({ state: [telemetry, frame], action, reward }) => {
         frame.dispose()
         telemetry.dispose()
         action.dispose()
@@ -39,10 +40,10 @@ importScripts('reply_buffer.js')
             nextTelemetries = []
     
         for (const {
-            state: [frame, telemetry], 
+            state: [telemetry, frame], 
             action, 
             reward, 
-            nextState: [nextFrame, nextTelemetry] 
+            nextState: [nextTelemetry, nextFrame] 
         } of samples) {
             frames.push(frame)
             telemetries.push(telemetry)
@@ -54,10 +55,10 @@ importScripts('reply_buffer.js')
     
         tf.tidy(() => {
             agent.train({
-                state: [tf.stack(frames), tf.stack(telemetries)], 
+                state: [tf.stack(telemetries), tf.stack(frames)], 
                 action: tf.stack(actions), 
                 reward: tf.stack(rewards), 
-                nextState: [tf.stack(nextFrames), tf.stack(nextTelemetries)]
+                nextState: [tf.stack(nextTelemetries), tf.stack(nextFrames)]
             })
         })
         
@@ -87,12 +88,12 @@ importScripts('reply_buffer.js')
      * @returns 
      */
     const decodeTransition = transition => {
-        let { id, state: [frames, telemetry], action, reward } = transition
+        let { id, state: [telemetry, frames], action, reward } = transition
     
         return tf.tidy(() => {
             state = [
-                tf.tensor3d(frames, agent._frameStackShape),
-                tf.tensor1d(telemetry)
+                tf.tensor1d(telemetry),
+                tf.tensor3d(frames, agent._frameStackShape)
             ]
             action = tf.tensor1d(action)
             reward = tf.tensor1d([reward])
