@@ -39,7 +39,7 @@ class ReplyBuffer {
      * @param {{id: number, priority: number, state: array, action, reward: number}} transition transition
      */
     add(transition) {
-        let {id, priority = 1} = transition
+        let { id, priority = 1 } = transition
         if (id === undefined || id < 0 || priority < 1) 
             throw new Error('Invalid arguments')
 

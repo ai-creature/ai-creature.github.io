@@ -3,6 +3,8 @@ importScripts('agent_sac.js')
 importScripts('reply_buffer.js')
 
 ;(async () => {
+    const DISABLED = false
+
     const print = (...args) => console.log(...args)
 
     const agent = new AgentSac({batchSize: 10, verbose: true})
@@ -17,7 +19,6 @@ importScripts('reply_buffer.js')
         reward.dispose()
     })
     
-    const DISABLED = false
     
     /**
      * Worker.
@@ -88,7 +89,7 @@ importScripts('reply_buffer.js')
      * @returns 
      */
     const decodeTransition = transition => {
-        let { id, state: [telemetry, frames], action, reward } = transition
+        let { id, state: [telemetry, frames], action, reward, priority } = transition
     
         return tf.tidy(() => {
             state = [
@@ -98,7 +99,7 @@ importScripts('reply_buffer.js')
             action = tf.tensor1d(action)
             reward = tf.tensor1d([reward])
     
-            return { id, state, action, reward }
+            return { id, state, action, reward, priority }
         })
     }
     

@@ -18,7 +18,8 @@ const AgentSac = (() => {
 
     const print = (...args) => console.log(...args)
 
-    const VERSION = 1
+    // const VERSION = 1 // +100 for bump tower
+    const VERSION = 2 // balls
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -355,6 +356,7 @@ const AgentSac = (() => {
 
         /**
          * Adjustment to log probability when squashing action with tanh
+         * Enforcing Action Bounds formula derivation https://stats.stackexchange.com/questions/239588/derivation-of-change-of-variables-of-a-probability-density-function
          * Translated from https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/tf1/sac/core.py#L48
          * 
          * @param {*} pi - policy sample
@@ -502,67 +504,69 @@ const AgentSac = (() => {
         _getConvEncoder(inputs) {
             const kernelSize = 3
             const padding = 'same'
-            const poolSize = 4
+            const poolSize = 2
             const strides = 1
 
             let outputs = inputs
-
-            outputs = tf.layers.conv2d({
-                filters: 32,
+            
+            outputs = tf.layers.separableConv2d({
+                filters: 64,
                 kernelSize,
                 strides,
                 padding,
                 activation: 'relu'
             }).apply(outputs)
             outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            // outputs = tf.layers.layerNormalization().apply(outputs)
 
-            outputs = tf.layers.conv2d({
-                filters: 32,
+            outputs = tf.layers.separableConv2d({
+                filters: 64,
                 kernelSize,
                 strides,
                 padding,
                 activation: 'relu'
             }).apply(outputs)
             outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            // outputs = tf.layers.layerNormalization().apply(outputs)
 
-            outputs = tf.layers.conv2d({
-                filters: 32,
+            outputs = tf.layers.separableConv2d({
+                filters: 64,
                 kernelSize,
                 strides,
                 padding,
                 activation: 'relu'
             }).apply(outputs)
             outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            // outputs = tf.layers.layerNormalization().apply(outputs)
+
+
+
+            outputs = tf.layers.separableConv2d({
+                filters: 128,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
+            outputs = tf.layers.separableConv2d({
+                filters: 128,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
+            outputs = tf.layers.separableConv2d({
+                filters: 128,
+                kernelSize,
+                strides,
+                padding,
+                activation: 'relu'
+            }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
 
             return outputs
-
-            // const layers = 13
-            
-            // let filterPow = 3
-            // let outputs = inputs
-            
-            // for (let i = 0; i < layers; i++) {
-            //     if (i%3 == 1) 
-            //         filterPow++
-        
-            //     outputs = tf.layers.conv2d({
-            //         filters: 2**filterPow,
-            //         kernelSize,
-            //         strides,
-            //         padding,
-            //         activation: 'relu',
-            //         kernelInitializer: 'heNormal',
-            //         biasInitializer: 'heNormal'
-            //     }).apply(outputs)
-            
-            //     if (i%2 == 1) 
-            //         outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            // }
-        
-            // return outputs
         }
 
         /**
@@ -606,6 +610,7 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
+// return
             if (this._forced) {
                 print('Forced to not load from the checkpoint ' + name)
                 return

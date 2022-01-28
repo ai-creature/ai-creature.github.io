@@ -56,7 +56,7 @@
             }
 
             #testCanvas2 {
-                position:absolute;
+                position: absolute;
                 width: 128px;
                 height: 64px;
                 right: 150px;
@@ -64,11 +64,42 @@
             }
 
             #testCanvas3 {
-                position:absolute;
+                position: absolute;
                 width: 128px;
                 height: 64px;
                 right: 0px;
                 bottom: 0;
+            }
+
+            /* #votes {
+                position: absolute;
+                border: 1px solid black;
+                bottom: 200px;
+                right: 0px;
+
+                width: 100px;
+                height: 150px;
+            } */
+
+            .vote {
+                position: absolute;
+                width: 60px;
+                height: 60px;
+                right: 10px;
+            }
+
+            .vote:hover {
+                cursor: pointer;
+            }
+
+            #like {
+                bottom: 200px;
+            }
+            
+            #dislike {
+                bottom: 120px;
+                -webkit-transform: scaleX(-1);
+                transform: scaleX(-1);
             }
         </style>
     </head>
@@ -78,6 +109,16 @@
         <canvas id="testCanvas1"></canvas>
         <canvas id="testCanvas2"></canvas>
         <canvas id="testCanvas3"></canvas>
+
+        <!-- <div id="votes"> -->
+            <div class="vote" id="like">
+                <img src="data:image/png;base64,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" alt="like">
+            </div>
+            <div class="vote" id="dislike">
+                <img src="data:image/png;base64,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" alt="">
+            </div>
+        <!-- </div> -->
+
         <script>
             const print = (...args) => console.log(...args)
             
@@ -92,6 +133,17 @@
                 preserveDrawingBuffer: true, 
                 stencil: true,
                 disableWebGL2Support: false
+            })
+
+            window.vote = 0
+            document.getElementById("like").addEventListener("click", () => {
+                if (!window.vote)
+                    window.vote = 10
+            })
+
+            document.getElementById("dislike").addEventListener("click", () => {
+                if (!window.vote)
+                    window.vote = -10
             })
 
             const createScene = async () => {
@@ -138,7 +190,11 @@
             
                 engine.displayLoadingUI();
 
-                await BABYLON.SceneLoader.AppendAsync("3d/marbleTower.glb");
+                await Promise.all([
+                    BABYLON.SceneLoader.AppendAsync("3d/marbleTower.glb"),
+                    BABYLON.SceneLoader.AppendAsync("https://models.babylonjs.com/Marble/marble/marble.gltf")
+                ])
+                scene.getMeshByName("marble").isVisible = false
 
                 const tower = scene.getMeshByName("tower");
                 tower.setParent(null);
@@ -158,7 +214,7 @@
                 creature.material = crMat
 
                 creature.impostor = new BABYLON.PhysicsImpostor(creature, BABYLON.PhysicsImpostor.SphereImpostor, {
-                    mass: 1,
+                    mass: 2,
                     friction: 0,
                     stiffness: 0,
                     restitution: 0
@@ -171,7 +227,6 @@
                 // Core
                 creature.glow = await BABYLON.ParticleHelper.CreateFromSnippetAsync("EXUQ7M-5.json", scene, false);
                 creature.glow.emitter = creature;
-
 
                 /* CREATURE's CAMERA */
                 const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(0, 2, 0), scene)
@@ -193,27 +248,6 @@
                 
 
                 engine.hideLoadingUI();
-
-                
-                /* ANIMATION */
-                // const rand = (min, max) => Math.random() * (max - min) + min
-                // ;(() => {
-                //     let start = Date.now()
-                //     scene.registerBeforeRender(() => {
-                //         const elapsed = Date.now() - start
-                //         if (elapsed < 1000) return
-                //         start = Date.now()
-
-                //         const range = [-0.5, 0.5]
-                //         var vec = new BABYLON.Vector3(rand(...range), rand(...range), rand(...range));
-                //         creature.impostor.applyImpulse(vec, BABYLON.Vector3.Zero());
-                        
-                //         // const rotRange = [-Math.PI/209, Math.PI/209]
-                //         // creature.addRotation(rand(...rotRange), rand(...rotRange), rand(...rotRange))
-
-                //         creature.glow.color2 = new BABYLON.Color4(Math.random(), Math.random(), Math.random());
-                //     })
-                // })()
 
                 /* CAGE */
                 const cage = BABYLON.MeshBuilder.CreateBox("cage", {
@@ -250,6 +284,43 @@
                 */
 
 
+                const ballRed = BABYLON.MeshBuilder.CreateSphere("ball_red", {diameter: 7, segments: 32}, scene)
+                ballRed.position = new BABYLON.Vector3(0, -10, 0)
+                ballRed.parent = null
+                // const ballRedMat = new BABYLON.StandardMaterial("ball_red_mat", scene);
+                // ballRedMat.diffuseColor = new BABYLON.Color3(0.1, 0, 0);
+                // ballRedMat.specularColor = new BABYLON.Color3(0, 0.1, 0.1);
+                // ballRed.material = ballRedMat
+                ballRed.impostor = new BABYLON.PhysicsImpostor(ballRed, BABYLON.PhysicsImpostor.SphereImpostor, {
+                    mass: 1,
+                    friction: 1,
+                    stiffness: 1,
+                    restitution: 1
+                }, scene);
+                ballRed.material = scene.getMaterialByName("redMat")
+
+
+
+                const ballGr = BABYLON.MeshBuilder.CreateSphere("ball_gr", {diameter: 7, segments: 32}, scene)
+                ballGr.position = new BABYLON.Vector3(0, -10, 0)
+                ballGr.parent = null
+                // const ballGrMat = new BABYLON.StandardMaterial("ball_gr_mat", scene);
+                // ballGrMat.diffuseColor = new BABYLON.Color3(0, 0.1, 0);
+                // ballGrMat.specularColor = new BABYLON.Color3(0.1, 0, 0);
+                // ballGr.material = ballGrMat
+                ballGr.impostor = new BABYLON.PhysicsImpostor(ballGr, BABYLON.PhysicsImpostor.SphereImpostor, {
+                    mass: 1,
+                    friction: 1,
+                    stiffness: 1,
+                    restitution: 1
+                }, scene);
+                ballGr.material = scene.getMaterialByName("greenMat")
+
+
+                // ballRed.impostor.applyImpulse(new BABYLON.Vector3(0, -20, 0), BABYLON.Vector3.Zero())
+                // ballGr.impostor.applyImpulse(new BABYLON.Vector3(0, -20, 0), BABYLON.Vector3.Zero())
+
+
                 /* WORKER */
                 const worker = new Worker('worker.js')
                 worker.addEventListener('message', e => {
@@ -265,10 +336,22 @@
                 const impostors = scene.getPhysicsEngine()._impostors.filter(im => im.object.id !== creature.id)
                 creature.impostor.registerOnPhysicsCollide(impostors /* tower.impostor */, (body1, body2) => {})
 
-                let collision = BABYLON.Vector3.Zero()
-                creature.impostor.onCollide = e => {
-                    print('tel COLLIDE')
-                    collision = e.point.subtract(creature.position).normalize()
+                let collision = null
+                let collisionMesh = null
+
+                creature.impostor.onCollide = (e) => {
+                    if (!collision) // don't register a new collision until prev is consumed
+                        collision = e.point.subtract(creature.position).normalize()
+                }
+
+                ballRed.impostor.onCollide = (e) => {
+                    if (!collisionMesh)
+                        collisionMesh = 'red'
+                }
+
+                ballGr.impostor.onCollide = (e) => {
+                    if (!collisionMesh)
+                        collisionMesh = 'gr'
                 }
 
                 const base64ToImg = (base64) => new Promise((res, _) => {
@@ -292,10 +375,6 @@
                 let prevLinearVelocity = BABYLON.Vector3.Zero()
 
                 let globalReward = 0
-
-
-
-
                 
                 let testLines;
 
@@ -318,6 +397,15 @@
                         height: 64,
                         width: 128 
                     })
+
+                    /* Creature's POV */
+                    ;(() => {
+                        const img = new Image()
+                        img.onload = () => document.getElementById('testCanvas3')
+                            .getContext('2d')
+                            .drawImage(img, 0, 0, 256, 128)
+                        img.src = base64Data
+                    })()
 
                     frameStack.push(base64Data)
 
@@ -351,44 +439,48 @@
                             acceleration.x,
                             acceleration.y,
                             acceleration.z,
-                            collision.x,
-                            collision.y,
-                            collision.z,
+                            collision && collision.x,
+                            collision && collision.y,
+                            collision && collision.z,
                             lidar
                         ]
 
                         let reward = 0
-                        if (collision.x || collision.y || collision.z) {
+                        if (collision) {
                             rewardCombo = 0
-                            reward = -100
+                            reward = -1
+                            if (collisionMesh === 'red') reward = -100
+                            if (collisionMesh === 'gr')  reward = +100
                         } else {
                             rewardCombo++
                             if (rewardCombo > maxCombo) {
                                 maxCombo = rewardCombo
                                 print('reward COMBO!!! ', maxCombo)
                             }
-                            reward = 1
+                            reward = 0
                         }
-
+                        reward += window.vote
+                        window.vote = 0
                         globalReward += reward
+                        
+                        print('reward: ', reward, maxCombo, rewardCombo, globalReward, collisionMesh)
 
-                        print('reward: ', reward, maxCombo, rewardCombo, globalReward)
+                        collision = null // reset collision point
+                        collisionMesh = null
 
-                        collision = BABYLON.Vector3.Zero() // reset collision point
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
 
-                        print('telemetry*********')
-                        print('tel linearVelocity: ', telemetry.slice(0,3))
-                        print('tel acceleration:   ', telemetry.slice(3,6))
-                        print('tel collision:      ', telemetry.slice(6,9))
-                        print('tel lidar:          ', lidar)
+                        print('telemetry linearVelocity: ', telemetry.slice(0,3))
+                        print('telemetry acceleration:   ', telemetry.slice(3,6))
+                        print('telemetry collision:      ', telemetry.slice(6,9), collisionMesh)
+                        print('telemetry lidar:          ', lidar)
 
                         const action = agent.sampleAction([telemetryBatch, framesBatch]) // timer ~5ms
                         // TODO: find the way to avoid framesNorm.array()
                         const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
                         
                         const 
-                            impulse = actionArr.slice(0, 3).map(v => v), //[0,-0.1, 0], //    
+                            impulse = actionArr.slice(0, 3).map(v => v), // [0,-1, 0], //    
                             //rotation = actionArr.slice(3, 7).map(el => el),
                             color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
                         
@@ -416,12 +508,9 @@
                         // );
                         // creature.rotate(orientation);
 
-
-
                         // print('linvel after', creature.impostor.getLinearVelocity().normalize())
 
-
-// const linearVelocity = creature.impostor.getLinearVelocity().normalize()
+                        // const linearVelocity = creature.impostor.getLinearVelocity().normalize()
                         // rocket.lookAt(direction);
                         // creature.lookAt(new BABYLON.Vector3(...impulse), 0, 0, 0, BABYLON.Space.LOCAL);
                         // creature.rotate(new BABYLON.Vector3(...impulse));
@@ -487,6 +576,11 @@
 
                             const transition = transitions.shift()
 
+                            // if (Math.abs(transition.reward) > 1) {
+                            //     transition.priority = 10
+                            //     print('reward priority ', transition)
+                            // }
+
                             worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
                         }
 
@@ -497,26 +591,19 @@
                         telemetryBatch.dispose()
                         action.dispose()
 
-                        if (stateId%1 == 0)
-                            frameStack.forEach((base64Data, i) => {
-                                const img = new Image()
-                                img.onload = () => document.getElementById('testCanvas' + (i+2))
-                                    .getContext('2d')
-                                    .drawImage(img, 0, 0, 256, 128)
-                                img.src = base64Data
-                            })
+                        // if (stateId%1 == 0)
+                        //     frameStack.forEach((base64Data, i) => {
+                        //         const img = new Image()
+                        //         img.onload = () => document.getElementById('testCanvas' + (i+2))
+                        //             .getContext('2d')
+                        //             .drawImage(img, 0, 0, 256, 128)
+                        //         img.src = base64Data
+                        //     })
 
                         frameStack.length = 0 // I will regret about this :D
                     }
 
-                    /* Creature's POV */
-                    // ;(() => {
-                    //     const img = new Image()
-                    //     img.onload = () => document.getElementById('testCanvas3')
-                    //         .getContext('2d')
-                    //         .drawImage(img, 0, 0, 256, 128)
-                    //     img.src = base64Data
-                    // })()
+
 
                     //mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                     
