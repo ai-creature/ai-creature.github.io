@@ -7,7 +7,7 @@ importScripts('reply_buffer.js')
 
     const print = (...args) => console.log(...args)
 
-    const agent = new AgentSac({batchSize: 10, verbose: true})
+    const agent = new AgentSac({batchSize: 100, verbose: true})
     await agent.init()
     await agent.checkpoint() // overwrite
     self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
@@ -18,8 +18,7 @@ importScripts('reply_buffer.js')
         action.dispose()
         reward.dispose()
     })
-    
-    
+
     /**
      * Worker.
      * 
@@ -27,9 +26,9 @@ importScripts('reply_buffer.js')
      */
     const job = async () => {
         if (DISABLED) return 99999
-        // if (rb.size < 500) return 1000
-    
-        const samples = rb.sample(agent._batchSize)
+        if (rb.size < agent._batchSize*3) return 1000
+        
+        const samples = rb.sample(agent._batchSize) // time fast
         if (!samples.length) return 1000
     
         const 
@@ -54,18 +53,24 @@ importScripts('reply_buffer.js')
             nextTelemetries.push(nextTelemetry)
         }
     
-        tf.tidy(() => {
+       tf.tidy(() => {
+            const state = [tf.stack(telemetries), tf.stack(frames)]
+            console.time('train')
             agent.train({
-                state: [tf.stack(telemetries), tf.stack(frames)], 
+                state, 
                 action: tf.stack(actions), 
                 reward: tf.stack(rewards), 
                 nextState: [tf.stack(nextTelemetries), tf.stack(nextFrames)]
             })
+            console.timeEnd('train')
         })
-        
-        self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))})
+        console.time('train postMessage')
+        self.postMessage({
+            weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))
+        })
+        console.timeEnd('train postMessage')
     
-        return 1
+        return 100
     }
     
     /**
@@ -108,11 +113,12 @@ importScripts('reply_buffer.js')
         i++
 
         if (DISABLED) return
-        if (i%20 === 0) console.log('RBSIZE: ', rb.size)
+        if (i%50 === 0) console.log('RBSIZE: ', rb.size)
     
         switch (e.data.action) {
             case 'newTransition':
-                rb.add(decodeTransition(e.data.transition))
+                const transition = decodeTransition(e.data.transition)
+                rb.add(transition)
                 break
             default:
                 console.warn('Unknown action')

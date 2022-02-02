@@ -3,7 +3,23 @@ import tensorflow as tf
 from random import randrange
 import tensorflow_probability as tfp
 
+arr = np.array([i for i in range(3072)], )
+arr = arr.reshape((64, 4, 12)) #.transpose((1, 2, 0))
+arr = np.moveaxis(arr, 0, 0)
 
+res, line = [], []
+for i, tile in enumerate(arr):
+  line.append(tile)
+  if (i+1) % 8 == 0 and i:
+    res.append(np.concatenate(line, 1))
+    line = []
+
+arr = np.stack(res)
+
+# arr = arr.reshape((48, 64))
+print(arr[0][1])
+
+##########
 
 _log_alpha = tf.Variable(0.0)
 _alpha = tfp.util.DeferredTensor(_log_alpha, tf.exp)
@@ -11,7 +27,7 @@ _alpha = tfp.util.DeferredTensor(_log_alpha, tf.exp)
 print('just alpha = ', _alpha.numpy())
 print('conv alpha = ', tf.convert_to_tensor(_alpha))
 
-
+##########
 
 import gym
 from gym import spaces

@@ -19,7 +19,8 @@ const AgentSac = (() => {
     const print = (...args) => console.log(...args)
 
     // const VERSION = 1 // +100 for bump tower
-    const VERSION = 2 // balls
+    // const VERSION = 2 // balls
+    const VERSION = 3 // tests
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -36,9 +37,9 @@ const AgentSac = (() => {
     return class AgentSac {
         constructor({
             batchSize = 1, 
-            frameShape = [64, 128, 3], 
-            nFrames = 2, // Number of stacked frames per state
-            nActions = 6, // 3 - impuls, 3 - RGB color
+            frameShape = [64, 128, 1], 
+            nFrames = 3, // Number of stacked frames per state
+            nActions = 3, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
@@ -65,7 +66,7 @@ const AgentSac = (() => {
             this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
             // https://github.com/rail-berkeley/softlearning/blob/13cf187cc93d90f7c217ea2845067491c3c65464/softlearning/algorithms/sac.py#L37
-            this._targetEntropy = -nActions 
+            this._targetEntropy = -nActions
         }
 
         /**
@@ -393,17 +394,18 @@ const AgentSac = (() => {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            let concatOutput = this._telemetryInput
+            // let outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(this._telemetryInput)
+            let outputs = this._telemetryInput
 
             if (this._sighted) {
-                let convOutputs = this._getConvEncoder(this._frameInput)
-                convOutputs = tf.layers.flatten().apply(convOutputs)
+                let convOutput = this._getConvEncoder(this._frameInput)
+                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
 
-                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, convOutputs])
+                outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(concatOutput)
-            outputs     = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
@@ -433,17 +435,18 @@ const AgentSac = (() => {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            let concatOutput
+            let outputs = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
+            // outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
+
             if (this._sighted) {
-                let convOutputs = this._getConvEncoder(this._frameInput)
-                convOutputs = tf.layers.flatten().apply(convOutputs)
-                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, convOutputs, this._actionInput])
-            } else {
-                concatOutput = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
+                let convOutput = this._getConvEncoder(this._frameInput)
+                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+
+                outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            let outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(concatOutput)
-            outputs     = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
 
@@ -468,12 +471,88 @@ const AgentSac = (() => {
         }
 
         /**
+         * Builds convolutional part of a network.
+         * 
+         * @param {Tensor} inputs - input for the conv layers
+         * @returns outputs
+         */
+        _getConvEncoder(inputs) {
+            const kernelSize = 3
+            const padding = 'valid'
+            const poolSize = 2
+            const strides = 1
+            // const depthwiseInitializer = 'heNormal'
+            // const pointwiseInitializer = 'heNormal'
+            const kernelInitializer = 'glorotNormal'
+            const biasInitializer = 'glorotNormal'
+
+            let outputs = inputs
+            
+            outputs = tf.layers.conv2d({
+                filters: 64,
+                kernelSize: 8,
+                strides: 4,
+                padding,
+                kernelInitializer,
+                biasInitializer,
+                activation: 'relu'
+            }).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
+            outputs = tf.layers.conv2d({
+                filters: 64,
+                kernelSize: 4,
+                strides: 2,
+                padding,
+                kernelInitializer,
+                biasInitializer,
+                activation: 'relu'
+            }).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+            
+            outputs = tf.layers.conv2d({
+                filters: 64,
+                kernelSize: 3,
+                strides: 1,
+                padding,
+                kernelInitializer,
+                biasInitializer,
+                activation: 'relu'
+            }).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+          
+            outputs = tf.layers.conv2d({
+                filters: 64,
+                kernelSize: 4,
+                strides: 1,
+                padding,
+                kernelInitializer,
+                biasInitializer,
+                activation: 'relu'
+            }).apply(outputs)
+
+            // outputs = tf.layers.batchNormalization().apply(outputs)
+
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
+            outputs = tf.layers.flatten().apply(outputs)
+
+            // convOutputs = tf.layers.dense({units: 96, activation: 'relu'}).apply(convOutputs)
+
+            return outputs
+        }
+
+        /**
          * Builds a log of entropy scale (α) for training.
          * 
          * @param {string} name 
          * @returns {tf.Variable} trainable variable for log entropy
          */
-        async _getAlpha(name = 'alpha') {
+         async _getAlpha(name = 'alpha') {
             let logAlpha = 0.0
 
             const checkpoint = await this._loadCheckpoint(name)
@@ -496,83 +575,9 @@ const AgentSac = (() => {
         }
 
         /**
-         * Builds convolutional part of a network.
-         * 
-         * @param {Tensor} inputs - input for the conv layers
-         * @returns outputs
-         */
-        _getConvEncoder(inputs) {
-            const kernelSize = 3
-            const padding = 'same'
-            const poolSize = 2
-            const strides = 1
-
-            let outputs = inputs
-            
-            outputs = tf.layers.separableConv2d({
-                filters: 64,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            outputs = tf.layers.separableConv2d({
-                filters: 64,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            outputs = tf.layers.separableConv2d({
-                filters: 64,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-
-
-            outputs = tf.layers.separableConv2d({
-                filters: 128,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            outputs = tf.layers.separableConv2d({
-                filters: 128,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            outputs = tf.layers.separableConv2d({
-                filters: 128,
-                kernelSize,
-                strides,
-                padding,
-                activation: 'relu'
-            }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-
-            return outputs
-        }
-
-        /**
          * Saves all agent's models to the storage.
          */
-         async checkpoint() {
+        async checkpoint() {
             if (!this._trainable) throw new Error('(╭ರ_ ⊙ )')
 
             this._logAlphaPlaceholder.setWeights([tf.tensor([this._logAlpha.arraySync()], [1, 1])])

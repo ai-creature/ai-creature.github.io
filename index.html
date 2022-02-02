@@ -39,11 +39,12 @@
                 height: 100%;
                 touch-action: none;
             }
+
             #testCanvas0 {
                 position:absolute;
                 width: 128px;
                 height: 64px;
-                right:450px;
+                right:600px;
                 bottom: 0;
             }
 
@@ -51,15 +52,15 @@
                 position:absolute;
                 width: 128px;
                 height: 64px;
-                right: 300px;
+                right:450px;
                 bottom: 0;
             }
 
             #testCanvas2 {
-                position: absolute;
+                position:absolute;
                 width: 128px;
                 height: 64px;
-                right: 150px;
+                right: 300px;
                 bottom: 0;
             }
 
@@ -67,9 +68,18 @@
                 position: absolute;
                 width: 128px;
                 height: 64px;
+                right: 150px;
+                bottom: 0;
+            }
+
+            #testCanvas4 {
+                position: absolute;
+                width: 128px;
+                height: 64px;
                 right: 0px;
                 bottom: 0;
             }
+
 
             /* #votes {
                 position: absolute;
@@ -109,6 +119,7 @@
         <canvas id="testCanvas1"></canvas>
         <canvas id="testCanvas2"></canvas>
         <canvas id="testCanvas3"></canvas>
+        <canvas id="testCanvas4"></canvas>
 
         <!-- <div id="votes"> -->
             <div class="vote" id="like">
@@ -137,17 +148,30 @@
 
             window.vote = 0
             document.getElementById("like").addEventListener("click", () => {
-                if (!window.vote)
-                    window.vote = 10
+                if (!transitions.length) return
+
+                let reward = 10
+                transitions[transitions.length - 1].reward += reward
+                globalReward += reward
+                print('reward like: ', transitions[transitions.length - 1].reward, globalReward)
             })
 
             document.getElementById("dislike").addEventListener("click", () => {
-                if (!window.vote)
-                    window.vote = -10
+                if (!transitions.length) return
+
+                let reward = -10
+                transitions[transitions.length - 1].reward += reward
+                globalReward += reward
+                print('reward dislike: ', transitions[transitions.length - 1].reward, globalReward)
             })
+
+            window.transitions = []
+            window.globalReward = 0
 
             const createScene = async () => {
                 await agent.init()
+
+                
 
                 // This creates a basic Babylon Scene object (non-mesh)
                 const scene = new BABYLON.Scene(engine);
@@ -231,6 +255,10 @@
                 /* CREATURE's CAMERA */
                 const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(0, 2, 0), scene)
                 crCamera.parent = creature
+                crCamera.fov = 1
+                // crCamera.fovMode = BABYLON.Camera.PERSPECTIVE_CAMERA;
+                // crCamera.fovMode = BABYLON.Camera.FOVMODE_HORIZONTAL_FIXED;
+                // crCamera.inertia = 2
                 // crCamera.setTarget(new BABYLON.Vector3(2, 0, 0))
                 // const crCameraMesh = BABYLON.MeshBuilder.CreateSphere("cr_camera_mesh", {diameter: 1, segments: 32}, scene);
                 // crCameraMesh.parent = crCamera
@@ -245,7 +273,6 @@
                 const clMat = new BABYLON.StandardMaterial("cl_mat", scene)
                 clMat.diffuseColor = new BABYLON.Color3(0, 0, 0)
                 client.material = clMat
-                
 
                 engine.hideLoadingUI();
 
@@ -255,9 +282,8 @@
                     depth: 35, 
                     height: 40
                 }, scene)
-                cage.setParent(null)
+                cage.parent = null
                 cage.position = new BABYLON.Vector3(0, -12,0)
-                // cage.isVisible = false
                 cage.isPickable = true
 
                 const cageMat = new BABYLON.StandardMaterial("cage_mat", scene);
@@ -283,38 +309,34 @@
                 // How to use: mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                 */
 
+                // const [ballRed, ballGreen, ballBlue, ballPurple, ballYellow] = ['red', 'green', 'blue', 'purple', 'yellow'].map(color => {
+                const balls = ['red', 'green', 'blue', 'purple'].map(color => {
+                    const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color, {diameter: 7, segments: 32}, scene)
+                    ball.position = new BABYLON.Vector3(0, -Math.random()*10, 0)
+                    ball.parent = null
+                    ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
+                        mass: 1,
+                        friction: 1,
+                        stiffness: 1,
+                        restitution: 1
+                    }, scene);
+                    ball.material = scene.getMaterialByName(color + "Mat")
+                    return ball
+                })
 
-                const ballRed = BABYLON.MeshBuilder.CreateSphere("ball_red", {diameter: 7, segments: 32}, scene)
-                ballRed.position = new BABYLON.Vector3(0, -10, 0)
-                ballRed.parent = null
-                // const ballRedMat = new BABYLON.StandardMaterial("ball_red_mat", scene);
-                // ballRedMat.diffuseColor = new BABYLON.Color3(0.1, 0, 0);
-                // ballRedMat.specularColor = new BABYLON.Color3(0, 0.1, 0.1);
-                // ballRed.material = ballRedMat
-                ballRed.impostor = new BABYLON.PhysicsImpostor(ballRed, BABYLON.PhysicsImpostor.SphereImpostor, {
-                    mass: 1,
-                    friction: 1,
-                    stiffness: 1,
-                    restitution: 1
-                }, scene);
-                ballRed.material = scene.getMaterialByName("redMat")
+                scene.onPointerDown = function(evt, pickInfo) {
+                    if(pickInfo.hit && pickInfo.pickedMesh.id.startsWith('cage')) {
+                        const getRand = () => new BABYLON.Vector3(Math.random()/10 - 0.1, Math.random()/10 - 0.1, Math.random()/10 - 0.1)
 
+                        balls.forEach(ball => ball.impostor.applyImpulse(getRand(), BABYLON.Vector3.Zero()))
+                    }
+                }
 
+                setInterval(()=>{
+                    const getRand = () => new BABYLON.Vector3(Math.random()/10 - 0.1, Math.random()/10 - 0.1, Math.random()/10 - 0.1)
 
-                const ballGr = BABYLON.MeshBuilder.CreateSphere("ball_gr", {diameter: 7, segments: 32}, scene)
-                ballGr.position = new BABYLON.Vector3(0, -10, 0)
-                ballGr.parent = null
-                // const ballGrMat = new BABYLON.StandardMaterial("ball_gr_mat", scene);
-                // ballGrMat.diffuseColor = new BABYLON.Color3(0, 0.1, 0);
-                // ballGrMat.specularColor = new BABYLON.Color3(0.1, 0, 0);
-                // ballGr.material = ballGrMat
-                ballGr.impostor = new BABYLON.PhysicsImpostor(ballGr, BABYLON.PhysicsImpostor.SphereImpostor, {
-                    mass: 1,
-                    friction: 1,
-                    stiffness: 1,
-                    restitution: 1
-                }, scene);
-                ballGr.material = scene.getMaterialByName("greenMat")
+                    balls.forEach(ball => ball.impostor.applyImpulse(getRand(), BABYLON.Vector3.Zero()))
+                }, 1000)
 
 
                 // ballRed.impostor.applyImpulse(new BABYLON.Vector3(0, -20, 0), BABYLON.Vector3.Zero())
@@ -324,11 +346,12 @@
                 /* WORKER */
                 const worker = new Worker('worker.js')
                 worker.addEventListener('message', e => {
-                    const { weights } = e.data
-                    if (weights)
-                        tf.tidy(() => {
+                    const { weights, frame } = e.data
+
+                    tf.tidy(() => {
+                        if (weights)
                             agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-                        })
+                    })
                 })
 
 
@@ -340,19 +363,32 @@
                 let collisionMesh = null
 
                 creature.impostor.onCollide = (e) => {
-                    if (!collision) // don't register a new collision until prev is consumed
+                    if (!collision && transitions.length) { // don't register a new collision until prev is consumed
                         collision = e.point.subtract(creature.position).normalize()
+                        transitions[transitions.length - 1].state[0].splice(6, 3, collision.x, collision.y, collision.z)
+
+                        let reward = -10
+
+                        transitions[transitions.length - 1].reward = reward
+                        globalReward += reward
+                        print('reward coll: ', reward, globalReward)
+                    }
                 }
 
-                ballRed.impostor.onCollide = (e) => {
-                    if (!collisionMesh)
-                        collisionMesh = 'red'
-                }
+                balls.forEach(ball => {
+                    ball.impostor.onCollide = (e) => {
+                        if (!collisionMesh && transitions.length) {
+                            collisionMesh = ball.id
 
-                ballGr.impostor.onCollide = (e) => {
-                    if (!collisionMesh)
-                        collisionMesh = 'gr'
-                }
+                            let reward = 100
+                            // if (collisionMesh.endsWith('_red')) reward = -100
+
+                            transitions[transitions.length - 1].reward += reward
+                            globalReward += reward
+                            print('reward ball: ', reward, globalReward, collisionMesh)
+                        }
+                    }
+                })
 
                 const base64ToImg = (base64) => new Promise((res, _) => {
                     const img = new Image()
@@ -360,10 +396,9 @@
                     img.onload = () => res(img)
                 })
                 const TRANSITIONS_BUFFER_SIZE = 2
-                const scalar255 = tf.scalar(255)
-                const frameEvery = 1000/20 // ~41ms ~24frames/sec
+                const frameEvery = 1000/30 // ~33ms ~24frames/sec
                 const frameStack = []
-                const transitions = []
+                // const transitions = []
 
                 let start = Date.now() + frameEvery
                 let busy = false
@@ -374,12 +409,18 @@
 
                 let prevLinearVelocity = BABYLON.Vector3.Zero()
 
-                let globalReward = 0
-                
-                let testLines;
+                // let globalReward = 0
+
+                const testLayer = agent.actor.layers[3]
+                const spy = tf.model({inputs: agent.actor.inputs, outputs: testLayer.output})
 
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
-                    if (Date.now() < start || busy) return
+                    if (Date.now() < start) return
+                    else if (busy) {
+                        console.warn('Busy!')
+                        return
+                    }
+
                     const delta = (Date.now() - (start - frameEvery)) / 1000 // sec
                     start = Date.now() + frameEvery
                     busy = true
@@ -399,13 +440,13 @@
                     })
 
                     /* Creature's POV */
-                    ;(() => {
-                        const img = new Image()
-                        img.onload = () => document.getElementById('testCanvas3')
-                            .getContext('2d')
-                            .drawImage(img, 0, 0, 256, 128)
-                        img.src = base64Data
-                    })()
+                    // ;(() => {
+                    //     const img = new Image()
+                    //     img.onload = () => document.getElementById('testCanvas3')
+                    //         .getContext('2d')
+                    //         .drawImage(img, 0, 0, 256, 128)
+                    //     img.src = base64Data
+                    // })()
 
                     frameStack.push(base64Data)
 
@@ -414,11 +455,31 @@
                             throw new Error("(⊙＿⊙')")
 
                         const imgs = await Promise.all(frameStack.map(base64Data => base64ToImg(base64Data)))
-                        const imgTensors = imgs.map(img => tf.browser.fromPixels(img))
                         // tf.browser.toPixels(tensors[0], document.getElementById("testCanvas")) // timer ~1ms
-        
-                        const frames = tf.concat(imgTensors, 2)
-                        const framesNorm = frames.div(scalar255)
+
+                        const framesNorm = tf.tidy(() => {
+                            const greyScaler = tf.tensor([0.299, 0.587, 0.114], [1, 1, 3])
+                            let imgTensors = imgs.map(img => tf.browser.fromPixels(img)
+                                .div(255)
+                                .mul(greyScaler).sum(-1, true)
+                            )
+                            
+                            // if (collisionMesh) {
+                            
+                            //     tf.browser.toPixels(imgTensors[0], document.getElementById('testCanvas2')) // timer ~1ms
+                            //     tf.browser.toPixels(imgTensors[1], document.getElementById('testCanvas3')) // timer ~1ms
+                            // }
+
+                            const res = tf.concat(imgTensors, -1)
+
+                            // let frTest = tf.unstack(res, -1)
+                            //     // frTest = [tf.concat(frTest.slice(0,3), -1), tf.concat(frTest.slice(3), -1)]
+                            // print(frTest[0].arraySync()[30][0][0], frTest[3].arraySync()[30][0][0])
+                            
+                            // print(tf.concat(tf.unstack(tf.concat(imgTensors, 2), -1), -1).arraySync()[30][0][0])
+
+                            return res
+                        })
                         const framesBatch = tf.stack([framesNorm])
 
                         const linearVelocity = creature.impostor.getLinearVelocity().normalize()
@@ -439,60 +500,90 @@
                             acceleration.x,
                             acceleration.y,
                             acceleration.z,
-                            collision && collision.x,
-                            collision && collision.y,
-                            collision && collision.z,
+                            0,0,0, // collision point
                             lidar
                         ]
 
                         let reward = 0
-                        if (collision) {
-                            rewardCombo = 0
-                            reward = -1
-                            if (collisionMesh === 'red') reward = -100
-                            if (collisionMesh === 'gr')  reward = +100
-                        } else {
-                            rewardCombo++
-                            if (rewardCombo > maxCombo) {
-                                maxCombo = rewardCombo
-                                print('reward COMBO!!! ', maxCombo)
-                            }
-                            reward = 0
-                        }
-                        reward += window.vote
+                        // if (collision) {
+                        //     rewardCombo = 0
+                        //     reward = -1
+                        //     if (collisionMesh) {
+                        //         if (collisionMesh.startsWith('ball_')) reward = 100
+                        //         if (collisionMesh.endsWith('_red'))  reward = -1000
+                        //     }
+                        // } else {
+                        //     rewardCombo++
+                        //     if (rewardCombo > maxCombo) {
+                        //         maxCombo = rewardCombo
+                        //         print('reward COMBO!!! ', maxCombo)
+                        //     }
+                        //     reward = 0
+                        // }
+                        // reward += window.vote
                         window.vote = 0
                         globalReward += reward
                         
-                        print('reward: ', reward, maxCombo, rewardCombo, globalReward, collisionMesh)
+                        // print('reward: ', reward, maxCombo, rewardCombo, globalReward, collisionMesh)
+                        // print('telemetry linearVelocity: ', telemetry.slice(0,3))
+                        // print('telemetry acceleration:   ', telemetry.slice(3,6))
+                        // print('telemetry collision:      ', telemetry.slice(6,9), collisionMesh)
+                        // print('telemetry lidar:          ', lidar)
+
+                        //collisionMesh &&  
+                        if (transitions.length) {
+                            tf.tidy(() => {
+                                let frTest = tf.unstack(tf.tensor(transitions[transitions.length - 1].state[1], [64,128,3]), -1)
+                                // frTest = [tf.stack(frTest.slice(0,3), -1), tf.stack(frTest.slice(3), -1)]
+                                let i = 2
+                                for (const fr of frTest) {
+                                    tf.browser.toPixels(fr, document.getElementById('testCanvas' + (i++))) // timer ~1ms
+                                }
+                            })
+                        }
 
                         collision = null // reset collision point
                         collisionMesh = null
 
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
-
-                        print('telemetry linearVelocity: ', telemetry.slice(0,3))
-                        print('telemetry acceleration:   ', telemetry.slice(3,6))
-                        print('telemetry collision:      ', telemetry.slice(6,9), collisionMesh)
-                        print('telemetry lidar:          ', lidar)
-
                         const action = agent.sampleAction([telemetryBatch, framesBatch]) // timer ~5ms
+
                         // TODO: find the way to avoid framesNorm.array()
                         const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
-                        
+
+                        tf.tidy(() => { // timer ~2.5ms
+                            const testOutput = spy.predict([telemetryBatch, framesBatch], {batchSize: 1})
+                            // print('testOutput', testLayer.name, testOutput.arraySync())
+                            let tiles = tf.squeeze(testOutput)
+                            tiles = tf.transpose(tiles, [2,0,1])
+                            tiles = tf.unstack(tiles)
+
+                            let res = [], line = []
+                            for (const [i, tile] of tiles.entries()) {
+                                line.push(tile)
+                                if ((i+1) % 8 == 0 && i) {
+                                    res.push(tf.concat(line, 1))
+                                    line = []
+                                }
+                            }
+                            const testFr = tf.concat(res)
+                            tf.browser.toPixels(testFr, document.getElementById('testCanvas1')) // timer ~1ms
+                        })
+
                         const 
-                            impulse = actionArr.slice(0, 3).map(v => v), // [0,-1, 0], //    
+                            impulse = actionArr.slice(0, 3).map(v => v) // [0,-1, 0], //    
                             //rotation = actionArr.slice(3, 7).map(el => el),
-                            color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
+                            // color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
                         
-                        console.assert(actionArr.length === 6, actionArr.length)
+                        console.assert(actionArr.length === 3, actionArr.length)
                         console.assert(impulse.length === 3)
                         // console.assert(rotation.length === 4)
-                        console.assert(color.length === 3)
+                        // console.assert(color.length === 3)
 
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
                         creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), BABYLON.Vector3.Zero()) // contact point zero
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
-                        creature.glow.color2 = new BABYLON.Color4(...color)
+                        // creature.glow.color2 = new BABYLON.Color4(...color)
                         
                         // after applyImpulse the linear velocity is recalculated right away
                         const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
@@ -500,68 +591,6 @@
 
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
                         creature.lookAt(creature.position.add(newLinearVelocity))
-
-                        // var orientation = BABYLON.Vector3.RotationFromAxis(
-                        //     new BABYLON.Vector3(linvel[0], 0, 0),
-                        //     new BABYLON.Vector3(0, linvel[1], 0),
-                        //     new BABYLON.Vector3(0, 0, linvel[2])
-                        // );
-                        // creature.rotate(orientation);
-
-                        // print('linvel after', creature.impostor.getLinearVelocity().normalize())
-
-                        // const linearVelocity = creature.impostor.getLinearVelocity().normalize()
-                        // rocket.lookAt(direction);
-                        // creature.lookAt(new BABYLON.Vector3(...impulse), 0, 0, 0, BABYLON.Space.LOCAL);
-                        // creature.rotate(new BABYLON.Vector3(...impulse));
-                        // creature.rotate(new BABYLON.Vector3(1, 0 ,0), Math.PI/2);
-
-                        // testLine.setDirection(new BABYLON.Vector3(...impulse))
-
-
-                        // ;(testLines && testLines.dispose())
-
-                        // const testDir = new BABYLON.Vector3(...impulse).scale(500);
-                        // testLines = BABYLON.MeshBuilder.CreateLines("lines", {points: [BABYLON.Vector3.Zero(), testDir]}, scene); 
-                        // testLines.parent = creature
-                        // testLines.color = new BABYLON.Color3(0, 1, 0);
-
-                        // creature.lookAt(new BABYLON.Vector3(...impulse), 0, 0, 0, BABYLON.Space.LOCAL);
-                        // creature.rotate(new BABYLON.Vector3(...impulse));
-                        // creature.rotate(new BABYLON.Vector3(1, 0 ,0), Math.PI/2);
-                        
-                        
-                        // var xx = BABYLON.Vector3.GetAngleBetweenVectors(
-                        //     new BABYLON.Vector3(...impulse), 
-                        //     crCamera.position, 
-                        //     new BABYLON.Vector3(1,0,0)
-                        // )
-                        // var yy = BABYLON.Vector3.GetAngleBetweenVectors(
-                        //     new BABYLON.Vector3(...impulse), 
-                        //     crCamera.position, 
-                        //     new BABYLON.Vector3(0,1,0)
-                        // )
-                        // var zz = BABYLON.Vector3.GetAngleBetweenVectors(
-                        //     new BABYLON.Vector3(...impulse), 
-                        //     crCamera.position, 
-                        //     new BABYLON.Vector3(0,0,1)
-                        // )
-                        // console.log('rotat', crCamera.absolutePosition)
-
-                        // creature.addRotation(xx,yy,zz) //= new BABYLON.Vector3(xx,yy,zz);
-
-
-                        // axis1 = (sphere1.position).subtract(sphere2.position);
-                        // axis3 = BABYLON.Vector3.Cross(camera.position, axis1);
-                        // axis2 = BABYLON.Vector3.Cross(axis3, axis1);
-
-
-                        // creature.rotation = new BABYLON.Vector3(...impulse)
-
-                        // creature.impostor.applyImpulse(new BABYLON.Vector3(0,0,-0.01), BABYLON.Vector3.Zero())
-                        // creature.moveWithCollisions(new BABYLON.Vector3(0,-0.1,0))
-                        // creature.impostor.setLinearVelocity(new BABYLON.Vector3(...impulse));
-                        // creature.impostor.setAngularVelocity(new BABYLON.Quaternion(...rotation, 0));
 
                         transitions.push({
                             id: stateId++, 
@@ -576,16 +605,17 @@
 
                             const transition = transitions.shift()
 
-                            // if (Math.abs(transition.reward) > 1) {
-                            //     transition.priority = 10
-                            //     print('reward priority ', transition)
-                            // }
+                            if (transition.reward > 1) {
+                                transition.priority = 11
+                                print('reward prio:', transition)
+                            }
 
                             worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
+
                         }
 
-                        imgTensors.forEach(t => t.dispose())
-                        frames.dispose()
+                        // imgTensors.forEach(t => t.dispose())
+                        // frames.dispose()
                         framesNorm.dispose()
                         framesBatch.dispose()
                         telemetryBatch.dispose()
@@ -602,8 +632,6 @@
 
                         frameStack.length = 0 // I will regret about this :D
                     }
-
-
 
                     //mirror.material.diffuseTexture = new BABYLON.Texture(base64Data, scene) // timer ~1ms
                     
