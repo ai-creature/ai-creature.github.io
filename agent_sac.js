@@ -397,17 +397,17 @@ const AgentSac = (() => {
             if (checkpoint) return checkpoint
 
             let outputs = this._telemetryInput
-            outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
-                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
 
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
+            // outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
@@ -438,17 +438,17 @@ const AgentSac = (() => {
             if (checkpoint) return checkpoint
 
             let outputs = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
-            outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
-                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
 
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
+            // outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
 

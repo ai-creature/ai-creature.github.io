@@ -10,6 +10,7 @@ importScripts('reply_buffer.js')
     const agent = new AgentSac({batchSize: 100, verbose: true})
     await agent.init()
     await agent.checkpoint() // overwrite
+    agent.actor.summary()
     self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
 
     const rb = new ReplyBuffer(1000, ({ state: [telemetry, frame], action, reward }) => {
@@ -70,7 +71,7 @@ importScripts('reply_buffer.js')
         })
         console.timeEnd('train postMessage')
     
-        return 100
+        return 1
     }
     
     /**

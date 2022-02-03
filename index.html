@@ -448,6 +448,7 @@
                     if (busy) return
 
                     const delta = (Date.now() - (start - frameEvery)) / 1000 // sec
+
                     start = Date.now() + frameEvery
                     busy = true
 
@@ -537,7 +538,7 @@
                             // rewardCombo = 0
                             reward = 0
                             if (collisionMesh) {
-                                if (collisionMesh.startsWith('ball_')) reward = 100
+                                if (collisionMesh.startsWith('ball_')) reward = 10
                                 // if (collisionMesh.endsWith('_red'))  reward = -100
                             }
                         } 
@@ -554,11 +555,6 @@
                         globalReward += reward
                         
                         print('reward: ', reward, globalReward, collisionMesh)
-                        // print('reward: ', reward, maxCombo, rewardCombo, globalReward, collisionMesh)
-                        // print('telemetry linearVelocity: ', telemetry.slice(0,3))
-                        // print('telemetry acceleration:   ', telemetry.slice(3,6))
-                        // print('telemetry collision:      ', telemetry.slice(6,9), collisionMesh)
-                        // print('telemetry lidar:          ', lidar)
 
                         //collisionMesh &&  
                         // if (collisionMesh && transitions.length) {
@@ -623,7 +619,7 @@
                         prevLinearVelocity = newLinearVelocity
 
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-                        creature.lookAt(creature.position.add(newLinearVelocity))
+                        creature.lookAt(creature.position.add(impulse))
 
                         transitions.push({
                             id: stateId++, 
@@ -638,10 +634,10 @@
 
                             const transition = transitions.shift()
 
-                            // if (transition.reward > 1) {
-                            //     transition.priority = 7
-                            //     print('reward prio:', transition)
-                            // }
+                            if (transition.reward > 1) {
+                                transition.priority = 7
+                                print('reward prio:', transition)
+                            }
 
                             worker.postMessage({action: 'newTransition', transition}) // timer ~ 6ms
 
