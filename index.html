@@ -333,6 +333,7 @@
                     ball.position = new BABYLON.Vector3(...ballPos[i])
                     ball.parent = null
                     ball.setParent(null)
+                    ball.isPickable = true
                     ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.MeshImpostor, {
                         mass: 0,
                         friction: 1,
@@ -489,11 +490,11 @@
                                 .mul(greyScaler).sum(-1, true)
                             )
                             
-                            if (collisionMesh) {
+                            // if (collisionMesh) {
                                 imgTensors.forEach((t, i) => {
-                                    tf.browser.toPixels(t, document.getElementById('testCanvas' + (i + 2))) // timer ~1ms
+                                    tf.browser.toPixels(t, document.getElementById('testCanvas' + (i + 3))) // timer ~1ms
                                 })
-                            }
+                            // }
 
                             const res = tf.concat(imgTensors, -1)
 
@@ -598,7 +599,7 @@
                                 }
                             }
                             const testFr = tf.concat(res)
-                            tf.browser.toPixels(testFr, document.getElementById('testCanvas1')) // timer ~1ms
+                            tf.browser.toPixels(testFr, document.getElementById('testCanvas2')) // timer ~1ms
                         })
 
                         const 

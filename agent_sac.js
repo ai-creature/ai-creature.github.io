@@ -21,7 +21,8 @@ const AgentSac = (() => {
     // const VERSION = 1 // +100 for bump tower
     // const VERSION = 2 // balls
     // const VERSION = 3 // tests
-    const VERSION = 4 // tests
+    // const VERSION = 4 // tests
+    const VERSION = 5 // tests
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -39,7 +40,7 @@ const AgentSac = (() => {
         constructor({
             batchSize = 1, 
             frameShape = [64, 128, 1], 
-            nFrames = 3, // Number of stacked frames per state
+            nFrames = 2, // Number of stacked frames per state
             nActions = 3, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
@@ -395,8 +396,8 @@ const AgentSac = (() => {
             const checkpoint = await this._loadCheckpoint(name)
             if (checkpoint) return checkpoint
 
-            // let outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(this._telemetryInput)
             let outputs = this._telemetryInput
+            outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
@@ -406,7 +407,6 @@ const AgentSac = (() => {
             }
 
             // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
@@ -438,7 +438,7 @@ const AgentSac = (() => {
             if (checkpoint) return checkpoint
 
             let outputs = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
-            // outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 64, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
@@ -448,7 +448,6 @@ const AgentSac = (() => {
             }
 
             // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
