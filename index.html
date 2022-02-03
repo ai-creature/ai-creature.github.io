@@ -224,7 +224,7 @@
                 scene.getMeshByName("marble").isVisible = false
 
                 const tower = scene.getMeshByName("tower");
-                // tower.parent = null
+                tower.setParent(null)
                 tower.checkCollisions = true;
                 tower.impostor = new BABYLON.PhysicsImpostor(tower, BABYLON.PhysicsImpostor.MeshImpostor, {
                     mass: 0,
@@ -235,6 +235,8 @@
                 /* CREATURE */
                 const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 2, segments:32}, scene)
                 creature.parent = null
+                creature.setParent(null)
+
                 creature.isPickable = false
 
                 const crMat = new BABYLON.StandardMaterial("cr_mat", scene);
@@ -279,6 +281,7 @@
                 /* CLIENT */
                 const client = BABYLON.MeshBuilder.CreateSphere("client", {diameter: 3, segments: 32}, scene);
                 client.parent = camera
+                client.setParent(camera)
                 client.position = new BABYLON.Vector3(0, -12,0)
 
                 const clMat = new BABYLON.StandardMaterial("cl_mat", scene)
@@ -294,6 +297,7 @@
                     height: 40
                 }, scene)
                 cage.parent = null
+                cage.setParent(null)
                 cage.position = new BABYLON.Vector3(0, -12,0)
                 cage.isPickable = true
 
@@ -328,6 +332,7 @@
                     const ball = BABYLON.MeshBuilder.CreateSphere("ball_"+ color, {diameter: 7, segments: 64}, scene)
                     ball.position = new BABYLON.Vector3(...ballPos[i])
                     ball.parent = null
+                    ball.setParent(null)
                     ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.MeshImpostor, {
                         mass: 0,
                         friction: 1,
@@ -438,11 +443,8 @@
                 const spy = tf.model({inputs: agent.actor.inputs, outputs: testLayer.output})
 
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
-                    if (Date.now() < start) return
-                    else if (busy) {
-                        console.warn('Busy!')
-                        return
-                    }
+                    if (/*Date.now() < start || */busy) return
+                    if (busy) return
 
                     const delta = (Date.now() - (start - frameEvery)) / 1000 // sec
                     start = Date.now() + frameEvery
