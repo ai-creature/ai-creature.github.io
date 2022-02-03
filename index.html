@@ -224,7 +224,7 @@
                 scene.getMeshByName("marble").isVisible = false
 
                 const tower = scene.getMeshByName("tower");
-                tower.parent = null
+                // tower.parent = null
                 tower.checkCollisions = true;
                 tower.impostor = new BABYLON.PhysicsImpostor(tower, BABYLON.PhysicsImpostor.MeshImpostor, {
                     mass: 0,
