@@ -20,7 +20,8 @@ const AgentSac = (() => {
 
     // const VERSION = 1 // +100 for bump tower
     // const VERSION = 2 // balls
-    const VERSION = 3 // tests
+    // const VERSION = 3 // tests
+    const VERSION = 4 // tests
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -404,6 +405,7 @@ const AgentSac = (() => {
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
+            // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
@@ -445,6 +447,7 @@ const AgentSac = (() => {
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
+            // outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
@@ -489,7 +492,7 @@ const AgentSac = (() => {
             let outputs = inputs
             
             outputs = tf.layers.conv2d({
-                filters: 64,
+                filters: 32,
                 kernelSize: 8,
                 strides: 4,
                 padding,
