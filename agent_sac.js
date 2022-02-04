@@ -41,7 +41,7 @@ const AgentSac = (() => {
             batchSize = 1, 
             frameShape = [64, 128, 1], 
             nFrames = 2, // Number of stacked frames per state
-            nActions = 3, // 3 - impuls, 3 - RGB color
+            nActions = 6, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
@@ -617,7 +617,7 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
-// return
+//  return
             if (this._forced) {
                 print('Forced to not load from the checkpoint ' + name)
                 return

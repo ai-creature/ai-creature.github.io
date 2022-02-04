@@ -150,7 +150,7 @@
             document.getElementById("like").addEventListener("click", () => {
                 if (!transitions.length) return
 
-                let reward = 100
+                let reward = 10
                 transitions[transitions.length - 1].reward += reward
                 globalReward += reward
                 print('reward like: ', transitions[transitions.length - 1].reward, globalReward)
@@ -159,7 +159,7 @@
             document.getElementById("dislike").addEventListener("click", () => {
                 if (!transitions.length) return
 
-                let reward = -100
+                let reward = -10
                 transitions[transitions.length - 1].reward += reward
                 globalReward += reward
                 print('reward dislike: ', transitions[transitions.length - 1].reward, globalReward)
@@ -334,7 +334,7 @@
                     ball.parent = null
                     ball.setParent(null)
                     ball.isPickable = true
-                    ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.MeshImpostor, {
+                    ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
                         mass: 0,
                         friction: 1,
                         stiffness: 1,
@@ -376,8 +376,11 @@
                     const { weights, frame } = e.data
 
                     tf.tidy(() => {
-                        if (weights)
+                        if (weights){
                             agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
+                            if (Math.random() > 0.95) print('weights:', weights)
+                        }
+
                     })
                 })
 
@@ -536,7 +539,7 @@
                         let reward = 0
                         if (collision.x || collision.y || collision.z) {
                             // rewardCombo = 0
-                            reward = 0
+                            reward = -1
                             if (collisionMesh) {
                                 if (collisionMesh.startsWith('ball_')) reward = 10
                                 // if (collisionMesh.endsWith('_red'))  reward = -100
@@ -582,7 +585,7 @@
                         tf.tidy(() => { // timer ~2.5ms
                             const testOutput = spy.predict([telemetryBatch, framesBatch], {batchSize: 1})
                             // print('testOutput', testLayer.name, testOutput.arraySync())
-                            let tiles = tf.squeeze(testOutput)
+                            let tiles = tf.clipByValue(tf.squeeze(testOutput), 0, 1)
                             tiles = tf.transpose(tiles, [2,0,1])
                             tiles = tf.unstack(tiles)
 
@@ -599,12 +602,14 @@
                         })
 
                         const 
-                            impulse = actionArr.slice(0, 3).map(v => v) // [0,-1, 0], //    
+                            impulse = actionArr.slice(0, 3), // [0,-1, 0], //    
                             //rotation = actionArr.slice(3, 7).map(el => el),
                             // color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
+                            look = actionArr.slice(3, 6)
                         
-                        console.assert(actionArr.length === 3, actionArr.length)
+                        console.assert(actionArr.length === 6, actionArr.length)
                         console.assert(impulse.length === 3)
+                        console.assert(look.length === 3)
                         // console.assert(rotation.length === 4)
                         // console.assert(color.length === 3)
 
@@ -619,7 +624,8 @@
                         prevLinearVelocity = newLinearVelocity
 
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-                        creature.lookAt(creature.position.add(impulse))
+                        // creature.lookAt(creature.position.add(new BABYLON.Vector3(...impulse)))
+                        creature.lookAt(creature.position.add(new BABYLON.Vector3(...look)))
 
                         transitions.push({
                             id: stateId++, 
