@@ -22,7 +22,10 @@ const AgentSac = (() => {
     // const VERSION = 2 // balls
     // const VERSION = 3 // tests
     // const VERSION = 4 // tests
-    const VERSION = 5 // tests
+    // const VERSION = 5 // exp #1
+    // const VERSION = 6 // exp #2
+    // const VERSION = 7 // exp #3
+    const VERSION = 8 // exp #4
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -41,7 +44,7 @@ const AgentSac = (() => {
             batchSize = 1, 
             frameShape = [64, 128, 1], 
             nFrames = 2, // Number of stacked frames per state
-            nActions = 6, // 3 - impuls, 3 - RGB color
+            nActions = 4, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)

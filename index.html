@@ -230,12 +230,15 @@
                     mass: 0,
                     friction: 1
                 }, scene);
+                tower.material = scene.getMaterialByName("stone")
+                tower.material.backFaceCulling = false
                 
 
                 /* CREATURE */
-                const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 2, segments:32}, scene)
+                const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 1, segments:32}, scene)
                 creature.parent = null
                 creature.setParent(null)
+                // creature.position = new BABYLON.Vector3(1,-10,3)
 
                 creature.isPickable = false
 
@@ -261,6 +264,9 @@
                 /* CREATURE's CAMERA */
                 const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(0, 0, 0), scene)
                 crCamera.parent = creature
+                crCamera.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                // crCamera.rotation = (new BABYLON.Vector3(0.5, 0, 0))
+                
                 crCamera.fov = 1.5
                 crCamera.checkCollisions = true;
                 // crCamera.ellipsoid = new BABYLON.Vector3(1, 1, 1);
@@ -304,6 +310,7 @@
                 const cageMat = new BABYLON.StandardMaterial("cage_mat", scene);
                 cageMat.alpha = 0.1 // for ray hit
                 cage.material = cageMat
+                cage.material.backFaceCulling = false
 
                 cage.impostor = new BABYLON.PhysicsImpostor(cage, BABYLON.PhysicsImpostor.MeshImpostor, {
                     mass: 0,
@@ -341,7 +348,8 @@
                         restitution: 1
                     }, scene);
                     ball.material = scene.getMaterialByName(color + "Mat")
-                    ball.checkCollisions = true;
+                    ball.checkCollisions = true
+                    ball.material.backFaceCulling = false
 
                     return ball
                 })
@@ -378,7 +386,7 @@
                     tf.tidy(() => {
                         if (weights){
                             agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-                            if (Math.random() > 0.95) print('weights:', weights)
+                            // if (Math.random() > 0.95) print('weights:', weights)
                         }
 
                     })
@@ -602,20 +610,20 @@
                         })
 
                         const 
-                            impulse = actionArr.slice(0, 3), // [0,-1, 0], //    
+                            impulse = actionArr.slice(0, 3)//, // [0,-1, 0], //    
                             //rotation = actionArr.slice(3, 7).map(el => el),
                             // color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
-                            look = actionArr.slice(3, 6)
+                            // look = actionArr.slice(3, 6)
                         
-                        console.assert(actionArr.length === 6, actionArr.length)
+                        console.assert(actionArr.length === 4, actionArr.length)
                         console.assert(impulse.length === 3)
-                        console.assert(look.length === 3)
+                        // console.assert(look.length === 3)
                         // console.assert(rotation.length === 4)
                         // console.assert(color.length === 3)
 
                         // impulse = [0.1,0,0]
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
-                        creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), BABYLON.Vector3.Zero()) // contact point zero
+                        creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
                         // creature.glow.color2 = new BABYLON.Color4(...color)
                         
@@ -624,8 +632,8 @@
                         prevLinearVelocity = newLinearVelocity
 
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-                        // creature.lookAt(creature.position.add(new BABYLON.Vector3(...impulse)))
-                        creature.lookAt(creature.position.add(new BABYLON.Vector3(...look)))
+                        creature.lookAt(creature.position.add(newLinearVelocity/*new BABYLON.Vector3(...newLinearVelocity)*/))
+                        // creature.lookAt(creature.position.add(new BABYLON.Vector3(...look)))
 
                         transitions.push({
                             id: stateId++, 
