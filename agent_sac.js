@@ -31,7 +31,8 @@ const AgentSac = (() => {
     // const VERSION = 13 // exp # 25x25 single CNN
     // const VERSION = 15 // 15.1 stable RB 10^5
     // const VERSION = 16 // reward from RL2, rb 10^6, gr/red balls, bad
-    const VERSION = 17 // reward from RL2, CNN from SAC paper
+    // const VERSION = 18 // reward from RL2, CNN from SAC paper, works!
+    const VERSION = 19 // moving balls
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -59,7 +60,7 @@ const AgentSac = (() => {
             forced = false, // force to create fresh models (not from checkpoint)
             prefix = '', // for tests,
             sighted = true,
-            minAlpha = 0.05
+            rewardScale = 10
         } = {}) {
             this._batchSize = batchSize
             this._frameShape = frameShape 
@@ -74,7 +75,7 @@ const AgentSac = (() => {
             this._prefix = (prefix === '' ? '' : prefix + '-')
             this._forced = forced
             this._sighted = sighted
-            this._minAlpha = minAlpha
+            this._rewardScale = rewardScale
             
             this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
@@ -167,7 +168,7 @@ const AgentSac = (() => {
     
                 // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
                 const alpha = this._getAlpha()
-                const target = reward.add(
+                const target = reward.mul(tf.scalar(this._rewardScale)).add(
                     tf.scalar(this._gamma).mul(
                         qTargValue.sub(alpha.mul(logPi))
                     )

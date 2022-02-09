@@ -342,7 +342,7 @@
                     ball.setParent(null)
                     ball.isPickable = true
                     ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
-                        mass: 0,
+                        mass: 100,
                         friction: 1,
                         stiffness: 1,
                         restitution: 1
@@ -384,7 +384,7 @@
                     tf.tidy(() => {
                         if (weights){
                             agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
-                            // if (Math.random() > 0.95) console.log('weights:', weights)
+                            if (Math.random() > 0.99) console.log('weights:', weights)
                         }
 
                     })
