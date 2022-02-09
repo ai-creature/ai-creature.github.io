@@ -5,15 +5,13 @@ importScripts('reply_buffer.js')
 ;(async () => {
     const DISABLED = false
 
-    const print = (...args) => console.log(...args)
-
     const agent = new AgentSac({batchSize: 100, verbose: true})
     await agent.init()
     await agent.checkpoint() // overwrite
     agent.actor.summary()
     self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
 
-    const rb = new ReplyBuffer(1000, ({ state: [telemetry, frame], action, reward }) => {
+    const rb = new ReplyBuffer(100000, ({ state: [telemetry, frame], action, reward }) => {
         frame.dispose()
         telemetry.dispose()
         action.dispose()
@@ -27,7 +25,7 @@ importScripts('reply_buffer.js')
      */
     const job = async () => {
         if (DISABLED) return 99999
-        if (rb.size < agent._batchSize*3) return 1000
+        if (rb.size < agent._batchSize*10) return 1000
         
         const samples = rb.sample(agent._batchSize) // time fast
         if (!samples.length) return 1000
@@ -82,7 +80,7 @@ importScripts('reply_buffer.js')
             setTimeout(tick, await job())
         } catch (e) {
             console.error(e)
-            // setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
+            setTimeout(tick, 5000) // show must go on (҂◡_◡) ᕤ
         }
     }
     
@@ -120,6 +118,20 @@ importScripts('reply_buffer.js')
             case 'newTransition':
                 const transition = decodeTransition(e.data.transition)
                 rb.add(transition)
+
+                tf.tidy(()=> {
+                    // return
+                    const {
+                        state: [telemetry, frame], 
+                        action,
+                    } = transition;
+                    const state = [tf.stack([telemetry]), tf.stack([frame])]
+                    const q1TargValue = agent.q1Targ.predict([...state, tf.stack([action])], {batchSize: 1})
+                    const q2TargValue = agent.q2Targ.predict([...state, tf.stack([action])], {batchSize: 1})                    
+                    console.log('value', Math.min(q1TargValue.arraySync()[0][0], q2TargValue.arraySync()[0][0]).toFixed(5))
+                })
+
+
                 break
             default:
                 console.warn('Unknown action')

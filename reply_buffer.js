@@ -43,18 +43,24 @@ class ReplyBuffer {
         if (id === undefined || id < 0 || priority < 1) 
             throw new Error('Invalid arguments')
 
-        const index = id % this._limit
+        id = id % this._limit
 
-        if (this._buffer[index]) {
-            this._pool = this._pool.filter(i => i !== index)
-            this._onDiscard(this._buffer[index])
+        if (this._buffer[id]) {
+            const start = this._pool.indexOf(id)
+            let deleteCount = 0
+            while (this._pool[start + deleteCount] == id)
+                deleteCount++
+
+            this._pool.splice(start, deleteCount)
+            
+            this._onDiscard(this._buffer[id])
         } else
             this.size++
 
         while (priority--) 
-            this._pool.push(index)
+            this._pool.push(id)
 
-        this._buffer[index] = transition
+        this._buffer[id] = transition
     }
 
     /**
@@ -85,7 +91,7 @@ class ReplyBuffer {
                 const nextId = id + 1
                 const next = this._buffer[nextId % this._limit]
 
-                if (next && next.id === nextId) {
+                if (next && next.id === nextId) { // the case when sampled the last element that still waiting for next state
                     samples.push({ state, action, reward, nextState: next.state})
                     break
                 }

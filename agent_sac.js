@@ -16,8 +16,6 @@ const AgentSac = (() => {
             msg + ' shape ' + tensor.shape + ' is not ' + shape)
     }
 
-    const print = (...args) => console.log(...args)
-
     // const VERSION = 1 // +100 for bump tower
     // const VERSION = 2 // balls
     // const VERSION = 3 // tests
@@ -25,7 +23,15 @@ const AgentSac = (() => {
     // const VERSION = 5 // exp #1
     // const VERSION = 6 // exp #2
     // const VERSION = 7 // exp #3
-    const VERSION = 8 // exp #4
+    // const VERSION = 8 // exp #4
+    // const VERSION = 9 // exp #
+    // const VERSION = 10 // exp # good, doesn't touch
+    // const VERSION = 11 // exp #
+    // const VERSION = 12 // exp # 25x25
+    // const VERSION = 13 // exp # 25x25 single CNN
+    // const VERSION = 15 // 15.1 stable RB 10^5
+    // const VERSION = 16 // reward from RL2, rb 10^6, gr/red balls, bad
+    const VERSION = 17 // reward from RL2, CNN from SAC paper
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -42,9 +48,9 @@ const AgentSac = (() => {
     return class AgentSac {
         constructor({
             batchSize = 1, 
-            frameShape = [64, 128, 1], 
-            nFrames = 2, // Number of stacked frames per state
-            nActions = 4, // 3 - impuls, 3 - RGB color
+            frameShape = [35, 35, 3], 
+            nFrames = 1, // Number of stacked frames per state
+            nActions = 3, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
             tau = 5e-3, // Target smoothing coefficient (τ)
@@ -52,7 +58,8 @@ const AgentSac = (() => {
             verbose = false,
             forced = false, // force to create fresh models (not from checkpoint)
             prefix = '', // for tests,
-            sighted = true
+            sighted = true,
+            minAlpha = 0.05
         } = {}) {
             this._batchSize = batchSize
             this._frameShape = frameShape 
@@ -67,6 +74,7 @@ const AgentSac = (() => {
             this._prefix = (prefix === '' ? '' : prefix + '-')
             this._forced = forced
             this._sighted = sighted
+            this._minAlpha = minAlpha
             
             this._frameStackShape = [...this._frameShape.slice(0, 2), this._frameShape[2] * this._nFrames]
 
@@ -98,13 +106,17 @@ const AgentSac = (() => {
             this.q2 = await this._getCritic(this._prefix + NAME.Q2)
             this.q2Optimizer = tf.train.adam()
 
-            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, false) // true for batch norm
-            this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, false)
+            this.q1Targ = await this._getCritic(this._prefix + NAME.Q1_TARGET, true) // true for batch norm
+            this.q2Targ = await this._getCritic(this._prefix + NAME.Q2_TARGET, true)
 
-            this._logAlpha = await this._getAlpha(this._prefix + NAME.ALPHA)
+            this._logAlpha = await this._getLogAlpha(this._prefix + NAME.ALPHA)
             this.alphaOptimizer = tf.train.adam()
 
             this.updateTargets(1)
+
+            // console.log('weights actorr', this.actor.getWeights().map(w => w.arraySync()))
+            // console.log('weights q1q1q1', this.q1.getWeights().map(w => w.arraySync()))
+            // console.log('weights q2Targ', this.q2Targ.getWeights().map(w => w.arraySync()))
 
             this._inited = true
         }
@@ -154,7 +166,7 @@ const AgentSac = (() => {
                 const qTargValue = tf.minimum(q1TargValue, q2TargValue)
     
                 // y = r + γ*(1 - d)*(min(Q1Targ(s', a'), Q2Targ(s', a')) - α*log(π(s'))
-                const alpha = tf.exp(this._logAlpha)
+                const alpha = this._getAlpha()
                 const target = reward.add(
                     tf.scalar(this._gamma).mul(
                         qTargValue.sub(alpha.mul(logPi))
@@ -213,7 +225,7 @@ const AgentSac = (() => {
                 
                 const criticValue = tf.minimum(q1Value, q2Value)
 
-                const alpha = tf.exp(this._logAlpha)
+                const alpha = this._getAlpha()
                 const loss = alpha.mul(logPi).sub(criticValue)
 
                 assertShape(freshAction, [this._batchSize, this._nActions], 'freshAction')
@@ -236,7 +248,7 @@ const AgentSac = (() => {
             const alphaLossFunction = () => {
                 const [, logPi] = this.sampleAction(state, true)
 
-                const alpha = tf.exp(this._logAlpha)
+                const alpha = this._getAlpha()
                 const loss = tf.scalar(-1).mul(
                     alpha.mul( // TODO: not sure whether this should be alpha or logAlpha
                         logPi.add(tf.scalar(this._targetEntropy))
@@ -269,7 +281,10 @@ const AgentSac = (() => {
                 q1WTarg = this.q1Targ.getWeights(),
                 q2WTarg = this.q2Targ.getWeights(),
                 len = q1W.length
-            // print(q1W, q1WTarg)
+
+            // console.log('updateTargets q1W', q1W.map(w=>w.arraySync()))
+            // console.log('updateTargets q1WTarg', q1WTarg.map(w=>w.arraySync()))
+
             const calc = (w, wTarg) => wTarg.mul(tf.scalar(1).sub(tau)).add(w.mul(tau))
             
             const w1 = [], w2 = []
@@ -280,6 +295,8 @@ const AgentSac = (() => {
             
             this.q1Targ.setWeights(w1)
             this.q2Targ.setWeights(w2)
+
+
         }
 
         /**
@@ -400,17 +417,17 @@ const AgentSac = (() => {
             if (checkpoint) return checkpoint
 
             let outputs = this._telemetryInput
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
-                convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
 
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            // outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
@@ -441,17 +458,17 @@ const AgentSac = (() => {
             if (checkpoint) return checkpoint
 
             let outputs = tf.layers.concatenate().apply([this._telemetryInput, this._actionInput])
-            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
                 let convOutput = this._getConvEncoder(this._frameInput)
-                convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
 
                 outputs = tf.layers.concatenate().apply([convOutput, outputs])
             }
 
-            outputs = tf.layers.dense({units: 512, activation: 'relu'}).apply(outputs)
-            // outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
+            outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
 
             outputs = tf.layers.dense({units: 1}).apply(outputs)
 
@@ -475,16 +492,24 @@ const AgentSac = (() => {
             return model
         }
 
+        // _encoder = null
+        // _getConvEncoder(inputs) {
+        //     if (!this._encoder)
+        //         this._encoder = this.__getConvEncoder(inputs)
+            
+        //     return this._encoder
+        // }
+
         /**
          * Builds convolutional part of a network.
          * 
          * @param {Tensor} inputs - input for the conv layers
          * @returns outputs
          */
-        _getConvEncoder(inputs) {
+         _getConvEncoder(inputs) {
             const kernelSize = 3
             const padding = 'valid'
-            const poolSize = 2
+            const poolSize = 3
             const strides = 1
             // const depthwiseInitializer = 'heNormal'
             // const pointwiseInitializer = 'heNormal'
@@ -493,52 +518,56 @@ const AgentSac = (() => {
 
             let outputs = inputs
             
+            // 32x8x4 -> 64x4x2 -> 64x3x1 -> 64x4x1
             outputs = tf.layers.conv2d({
-                filters: 32,
-                kernelSize: 8,
-                strides: 4,
-                padding,
-                kernelInitializer,
-                biasInitializer,
-                activation: 'relu'
-            }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-
-            outputs = tf.layers.conv2d({
-                filters: 64,
-                kernelSize: 4,
-                strides: 2,
-                padding,
-                kernelInitializer,
-                biasInitializer,
-                activation: 'relu'
-            }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-            
-            outputs = tf.layers.conv2d({
-                filters: 64,
+                filters: 4,
                 kernelSize: 3,
                 strides: 1,
                 padding,
                 kernelInitializer,
                 biasInitializer,
-                activation: 'relu'
+                activation: 'relu',
+                trainable: true
             }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-          
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+
             outputs = tf.layers.conv2d({
-                filters: 64,
-                kernelSize: 4,
+                filters: 4,
+                kernelSize: 3,
                 strides: 1,
                 padding,
                 kernelInitializer,
                 biasInitializer,
-                activation: 'relu'
+                activation: 'relu',
+                trainable: true
             }).apply(outputs)
+            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+            
+            // outputs = tf.layers.conv2d({
+            //     filters: 64,
+            //     kernelSize: 3,
+            //     strides: 1,
+            //     padding,
+            //     kernelInitializer,
+            //     biasInitializer,
+            //     activation: 'relu',
+            //     trainable: true
+            // }).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+          
+            // outputs = tf.layers.conv2d({
+            //     filters: 64,
+            //     kernelSize: 4,
+            //     strides: 1,
+            //     padding,
+            //     kernelInitializer,
+            //     biasInitializer,
+            //     activation: 'relu'
+            // }).apply(outputs)
 
             // outputs = tf.layers.batchNormalization().apply(outputs)
 
@@ -552,12 +581,22 @@ const AgentSac = (() => {
         }
 
         /**
+         * Returns clipped alpha.
+         * 
+         * @returns {Tensor} entropy
+         */
+        _getAlpha() {
+            // return tf.maximum(tf.exp(this._logAlpha), tf.scalar(this._minAlpha))
+            return tf.exp(this._logAlpha)
+        }
+
+        /**
          * Builds a log of entropy scale (α) for training.
          * 
          * @param {string} name 
          * @returns {tf.Variable} trainable variable for log entropy
          */
-         async _getAlpha(name = 'alpha') {
+        async _getLogAlpha(name = 'alpha') {
             let logAlpha = 0.0
 
             const checkpoint = await this._loadCheckpoint(name)
@@ -565,7 +604,7 @@ const AgentSac = (() => {
                 logAlpha = checkpoint.getWeights()[0].arraySync()[0][0]
 
                 if (this._verbose)
-                    print('Checkpoint alpha: ', logAlpha)
+                    console.log('Checkpoint alpha: ', logAlpha)
                     
                 this._logAlphaPlaceholder = checkpoint
             } else {
@@ -597,7 +636,7 @@ const AgentSac = (() => {
             ])
 
             if (this._verbose) 
-                print('Checkpoint succesfully saved')
+                console.log('Checkpoint succesfully saved')
         }
 
         /**
@@ -610,7 +649,7 @@ const AgentSac = (() => {
             const saveResults = await model.save(key)
 
             if (this._verbose) 
-                print('Checkpoint saveResults', model.name, saveResults)
+                console.log('Checkpoint saveResults', model.name, saveResults)
         }
 
         /**
@@ -620,9 +659,9 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
-//  return
+//   return 
             if (this._forced) {
-                print('Forced to not load from the checkpoint ' + name)
+                console.log('Forced to not load from the checkpoint ' + name)
                 return
             }
 
@@ -633,13 +672,13 @@ const AgentSac = (() => {
                 const model = await tf.loadLayersModel(key)
 
                 if (this._verbose) 
-                    print('Loaded checkpoint for ' + name)
+                    console.log('Loaded checkpoint for ' + name)
 
                 return model
             }
             
             if (this._verbose) 
-                print('Checkpoint not found for ' + name)
+                console.log('Checkpoint not found for ' + name)
         }
         
         /**
@@ -657,8 +696,6 @@ const AgentSac = (() => {
 /* TESTS */
 ;(async () => {
     return 
-
-    const print = (...args) => console.log(...args)
 
     // https://www.wolframalpha.com/input/?i2d=true&i=y%5C%2840%29x%5C%2844%29+%CE%BC%5C%2844%29+%CF%83%5C%2841%29+%3D+ln%5C%2840%29Divide%5B1%2CSqrt%5B2*%CF%80*Power%5B%CF%83%2C2%5D%5D%5D*Exp%5B-Divide%5B1%2C2%5D*%5C%2840%29Divide%5BPower%5B%5C%2840%29x-%CE%BC%5C%2841%29%2C2%5D%2CPower%5B%CF%83%2C2%5D%5D%5C%2841%29%5D%5C%2841%29
     ;(() => {
