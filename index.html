@@ -237,7 +237,7 @@
                 const creature = BABYLON.MeshBuilder.CreateSphere("creature", {diameter: 1, segments:32}, scene)
                 creature.parent = null
                 creature.setParent(null)
-                // creature.position = new BABYLON.Vector3(1,-10,3)
+                creature.position = new BABYLON.Vector3(0,-5,0)
 
                 creature.isPickable = false
 
@@ -250,7 +250,7 @@
                     friction: 0,
                     stiffness: 0,
                     restitution: 0
-                }, scene);
+                }, scene)
                 
                 BABYLON.ParticleHelper.SnippetUrl = "3d/snippet";
                 // Sparks
@@ -261,13 +261,25 @@
                 creature.glow.emitter = creature;
 
                 /* CREATURE's CAMERA */
-                const crCamera = new BABYLON.UniversalCamera("cr_camera", new BABYLON.Vector3(0, 0, 0), scene)
-                crCamera.parent = creature
-                crCamera.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                const crCameraLeft = new BABYLON.UniversalCamera("cr_camera_l", new BABYLON.Vector3(0, 0, 0), scene)
+                crCameraLeft.parent = creature
+                crCameraLeft.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                crCameraLeft.fov = 2.4
+                // crCameraLeft.fovMode = BABYLON.Camera.PERSPECTIVE_CAMERA;
+
+                crCameraLeft.setTarget(new BABYLON.Vector3(-1, 0, 0.5))
+                // crCameraLeft.rotation = new BABYLON.Vector3(0, -(Math.PI - 0.3), 0)
+
+                const crCameraRight = new BABYLON.UniversalCamera("cr_camera_r", new BABYLON.Vector3(0, 0, 0), scene)
+                crCameraRight.parent = creature
+                crCameraRight.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                crCameraRight.fov = 2.4
+                // crCameraRight.fovMode = BABYLON.Camera.FOVMODE_HORIZONTAL_FIXED;
+                crCameraRight.setTarget(new BABYLON.Vector3(1, 0, 0.5))
+                // crCameraRight.rotation = new BABYLON.Vector3(0, +(Math.PI - 0.3), 0)
+
+                // crCameraRight.checkCollisions = true;
                 // crCamera.rotation = (new BABYLON.Vector3(0.5, 0, 0))
-                
-                crCamera.fov = 1.5
-                crCamera.checkCollisions = true;
                 // crCamera.ellipsoid = new BABYLON.Vector3(1, 1, 1);
                 // crCamera.ellipsoidOffset = new BABYLON.Vector3(3, 3, 3);
                 // creature.checkCollisions = true;
@@ -378,11 +390,13 @@
 
                 /* WORKER */
                 const worker = new Worker('worker.js')
+                let inited = false 
                 worker.addEventListener('message', e => {
                     const { weights, frame } = e.data
 
                     tf.tidy(() => {
-                        if (weights){
+                        if (weights) {
+                            inited = true
                             agent.actor.setWeights(weights.map(w => tf.tensor(w))) // timer ~30ms
                             if (Math.random() > 0.99) console.log('weights:', weights)
                         }
@@ -452,7 +466,7 @@
                 const spy = tf.model({inputs: agent.actor.inputs, outputs: testLayer.output})
 
                 scene.registerAfterRender(async () => { // timer ~ 20-90ms
-                    if (/*Date.now() < start || */busy) return
+                    if (/*Date.now() < start || */busy || !inited) return
 
                     // const delta = (Date.now() - timestamp) / 1000 // sec
                     // timestamp = Date.now() 
@@ -468,10 +482,16 @@
                     console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     */
 
-                    const base64Data = await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCamera, { // ~ 7-60ms
-                        height: 35,
-                        width: 35 
-                    })
+                    const base64Data = await Promise.all([
+                        BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
+                            height: agent._frameShape[0],
+                            width: agent._frameShape[1]
+                        }),
+                        BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, { // ~ 7-60ms
+                            height: agent._frameShape[0],
+                            width: agent._frameShape[1]
+                        })
+                    ])
 
                     /* Creature's POV */
                     // ;(() => {
@@ -482,7 +502,7 @@
                     //     img.src = base64Data
                     // })()
 
-                    frameStack.push(base64Data)
+                    frameStack.push(...base64Data)
 
                     if (frameStack.length >= agent._nFrames) { // ~20ms
                         if (frameStack.length > agent._nFrames)
@@ -500,7 +520,10 @@
                             
                             // if (collisionMesh) {
                                 imgTensors = imgTensors.map((t, i) => {
-                                    tf.browser.toPixels(t, document.getElementById('testCanvas' + (i + 3))) // timer ~1ms
+                                    const canv = document.getElementById('testCanvas' + (i + 3))
+                                    if (canv) {
+                                        tf.browser.toPixels(t, canv) // timer ~1ms
+                                    }
                                     return t
                                         .sub(255/2)
                                         .div(255/2) 
@@ -520,6 +543,7 @@
                         const framesBatch = tf.stack([framesNorm])
 
                         const delta = (Date.now() - timer) / 1000 // sec
+                        console.log('delta (s)', delta)
                         const linearVelocity = creature.impostor.getLinearVelocity()
                         const linearVelocityNorm = linearVelocity.normalize()
                         const acceleration = linearVelocity.subtract(prevLinearVelocity).scale(1/delta).normalize()
@@ -593,7 +617,6 @@
 
 
 
-
                         // TODO: !!!!!await find the way to avoid framesNorm.array()
                         console.time('await')
                         const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
@@ -622,10 +645,11 @@
                         })
 
                         const 
-                            impulse = actionArr.slice(0, 3)//, // [0,-1, 0], //    
-                            //rotation = actionArr.slice(3, 7).map(el => el),
-                            // color = actionArr.slice(3, 6) //.map(el => el) // [-1,1] => [0,2] => [0, 255]
+                            impulse = actionArr.slice(0, 3)//, //.map(el => el*2)//, // [0,-1, 0], //    
+                            // rotation = actionArr.slice(3, 7).map(el => el),
+                            // color = actionArr.slice(3, 6).map(el => el)/.map(el => el) // [-1,1] => [0,2] => [0, 255]
                             // look = actionArr.slice(3, 6)
+
 console.log('tel tel: ', telemetry.map(t=> t.toFixed(3)))
 console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
@@ -637,16 +661,17 @@ console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
                         // [0,-1,0]
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
+                        // creature.impostor.setLinearVelocity(BABYLON.Vector3.Zero()) // contact point zero
                         creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
                         // creature.glow.color2 = new BABYLON.Color4(...color)
                         
                         // after applyImpulse the linear velocity is recalculated right away
                         const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
-
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-                        creature.lookAt(creature.position.add(newLinearVelocity/*new BABYLON.Vector3(...newLinearVelocity)*/))
-                        // creature.lookAt(creature.position.add(new BABYLON.Vector3(...look)))
+                        creature.lookAt(creature.position.add(newLinearVelocity))
+                        //if (!window.rr) window.rr = 
+                        // creature.lookAt(creature.position.add(new BABYLON.Vector3(0,1,0)))
 
                         const transtion = {
                             id: stateId++, 

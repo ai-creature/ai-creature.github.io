@@ -32,7 +32,21 @@ const AgentSac = (() => {
     // const VERSION = 15 // 15.1 stable RB 10^5
     // const VERSION = 16 // reward from RL2, rb 10^6, gr/red balls, bad
     // const VERSION = 18 // reward from RL2, CNN from SAC paper, works!
-    const VERSION = 19 // moving balls
+    // const VERSION = 19 // moving balls, super!
+    // const VERSION = 20 // moving balls, discret impulse, bad
+    // const VERSION = 21 // independant look
+    // const VERSION = 22 // dqn arch, bad
+    // const VERSION = 23 // dqn trunc, works! fast learn
+    // const VERSION = 24 // dqn trunc 3 layers, super and fast
+    // const VERSION = 25 // dqn trunc 3 layers 2x512, poor
+    // const VERSION = 26 // rl2 cnn arc, bad too many weights
+    // const VERSION = 27 // sac cnn 16x6x3->16x4x2->8x3x1->2x256 and 2 clr frames, 2h, kiss, Excellent!
+    // const VERSION = 28 // same but 1 frame, works
+    // const VERSION = 29 // 1fr w/o accel, poor
+    // const VERSION = 30 // 2fr wide img, poor
+    // const VERSION = 31 // 2 small imgs, small cnn out, poor
+    // const VERSION = 32 // 2fr binacular
+    const VERSION = 33 // 4fr binacular
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -49,8 +63,8 @@ const AgentSac = (() => {
     return class AgentSac {
         constructor({
             batchSize = 1, 
-            frameShape = [35, 35, 3], 
-            nFrames = 1, // Number of stacked frames per state
+            frameShape = [25, 25, 3], 
+            nFrames = 4, // Number of stacked frames per state
             nActions = 3, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
@@ -521,21 +535,35 @@ const AgentSac = (() => {
             
             // 32x8x4 -> 64x4x2 -> 64x3x1 -> 64x4x1
             outputs = tf.layers.conv2d({
-                filters: 4,
-                kernelSize: 3,
-                strides: 1,
+                filters: 16,
+                kernelSize: 5,
+                strides: 2,
                 padding,
                 kernelInitializer,
                 biasInitializer,
                 activation: 'relu',
                 trainable: true
             }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
             
             // outputs = tf.layers.layerNormalization().apply(outputs)
 
             outputs = tf.layers.conv2d({
-                filters: 4,
+                filters: 16,
+                kernelSize: 4,
+                strides: 2,
+                padding,
+                kernelInitializer,
+                biasInitializer,
+                activation: 'relu',
+                trainable: true
+            }).apply(outputs)
+            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
+
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+            
+            outputs = tf.layers.conv2d({
+                filters: 8,
                 kernelSize: 3,
                 strides: 1,
                 padding,
@@ -544,20 +572,6 @@ const AgentSac = (() => {
                 activation: 'relu',
                 trainable: true
             }).apply(outputs)
-            outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-            
-            // outputs = tf.layers.conv2d({
-            //     filters: 64,
-            //     kernelSize: 3,
-            //     strides: 1,
-            //     padding,
-            //     kernelInitializer,
-            //     biasInitializer,
-            //     activation: 'relu',
-            //     trainable: true
-            // }).apply(outputs)
             // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
           
             // outputs = tf.layers.conv2d({
@@ -660,7 +674,7 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
-//   return 
+//    return
             if (this._forced) {
                 console.log('Forced to not load from the checkpoint ' + name)
                 return
