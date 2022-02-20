@@ -46,7 +46,58 @@ const AgentSac = (() => {
     // const VERSION = 30 // 2fr wide img, poor
     // const VERSION = 31 // 2 small imgs, small cnn out, poor
     // const VERSION = 32 // 2fr binacular
-    const VERSION = 33 // 4fr binacular
+    // const VERSION = 33 // 4fr binacular, Good, but poor after reload on wider cage
+    // const VERSION = 34 // 4fr binacular, smaller fov=2, angle 0.7, poor
+    // const VERSION = 35 // 4fr binacular with dist, poor
+    // const VERSION = 36 // 4fr binacular with dist, works but reload not
+    // const VERSION = 37 // BCNN achiasma, good -> reload poor
+    // const VERSION = 38 // BCNN achiasma, smaller cnn
+    // const VERSION = 39 // 1fr BCNN achiasma, smaller cnn, works super fast, 30min
+    // const VERSION = 40 // 2fr BCNN achiasma, 2l smaller cnn, poor
+    // const VERSION = 41 // 2fr BCNN achiasma, 2l smaller cnn, some perfm after 30min
+    // const VERSION = 41 // 1fr BCNN achiasma, 2l smaller cnn, super kiss, reload poor
+    // const VERSION = 42 // 2fr BCNN achiasma, 2l smaller cnn, reload poor
+    // const VERSION = 43 // 1fr BCNN achiasma, 3l, fov 0.8, 1h good, reload not bad
+    // const VERSION = 44 // 2fr BCNN achiasma, 3l, fov 0.8, slow 1h, reload not bad, a bit better than 1fr, degrade
+    // const VERSION = 45 // 1fr BCNN achiasma, 2l, fov 0.8, poor
+    // const VERSION = 46 // 2fr BCNN achiasma, 2l, fov 0.8, fast 30 min but poor on reload
+    // const VERSION = 47 // 1fr BCNN chiasma, 2l, fov 0.7, poor
+    // const VERSION = 48 // 2fr BCNN chiasma, 2l, fov 0.7 poor
+    // const VERSION = 49 // 1fr BCNN chiasma stacked, 3l, poor
+    // const VERSION = 50 // 2fr 2nets monocular, 1h good, reload poor
+    // const VERSION = 51 // 1fr 1nets monocular, stuck
+    // const VERSION = 52 // 2fr 2nets monocular, poor
+    // const VERSION = 53 // 2fr 2nets monocular, 
+    // const VERSION = 54 // 2fr binocular
+    // const VERSION = 55 // 2fr binocular
+    // const VERSION = 56 // 2fr binocular
+    // const VERSION = 57 // 1fr binocular, sphere vimeo super
+    // const VERSION = 58 // 2fr binocular, sphere
+    // const VERSION = 59 // 1fr binocular, sphere
+    // const VERSION = 61 // 2fr binocular, sphere, 2lay BASELINE!!! cage 55, mass 2, ball mass 1
+    // const VERSION = 62
+    //const VERSION = 63 // 1fr 30min! cage 60
+    // const VERSION = 64 // 2fr nores
+    // const VERSION = 66 // 1fr 30min slightly slower
+    // const VERSION = 67 // 2fr 30min as prev
+    // const VERSION = 65 // 1fr l/r diff, 30min +400
+    // const VERSION = 68 // 1fr l/r diff, 30min -100 good
+    // const VERSION = 69 // 1fr l/r diff, 30min -190 good
+    // const VERSION = 70 // 1fr l/r diff, 30min -420
+    // const VERSION = 71 // 1fr l/r diff, 30min -480
+    // const VERSION = 72 // 1fr no diff, 30min 
+    // const VERSION = 73 // 1fr no diff, 30min -400 cage 50
+    // const VERSION = 74 // 1fr diff, 30min 2.6k!
+    // const VERSION = 75 // 1fr diff, 30min -300
+    // const VERSION = 76 // 1fr diff, 20min +300!
+    // const VERSION = 77 // 1fr diff, 20min +3.5k!
+    // const VERSION = 78 // 1fr diff, 30min -90
+    // const VERSION = 79 // 1fr NO diff, 25min +158
+    // const VERSION = 80 // 1fr NO diff, 30min -200
+    // const VERSION = 81 // 1fr NO diff, 20min +1200
+    // const VERSION = 82 // 1fr NO diff, 30min
+    // const VERSION = 83 // 1fr NO diff, priority 30min -400
+    const VERSION = 84 // 1fr diff, 30min
 
     const LOG_STD_MIN = -20
     const LOG_STD_MAX = 2
@@ -64,7 +115,7 @@ const AgentSac = (() => {
         constructor({
             batchSize = 1, 
             frameShape = [25, 25, 3], 
-            nFrames = 4, // Number of stacked frames per state
+            nFrames = 1, // Number of stacked frames per state
             nActions = 3, // 3 - impuls, 3 - RGB color
             nTelemetry = 10, // 3 - linear valocity, 3 - acceleration, 3 - collision point, 1 - lidar (tanh of distance)
             gamma = 0.99, // Discount factor (γ)
@@ -103,7 +154,9 @@ const AgentSac = (() => {
         async init() {
             if (this._inited) throw Error('щ（ﾟДﾟщ）')
 
-            this._frameInput = tf.input({batchShape : [null, ...this._frameStackShape]})
+            this._frameInputL = tf.input({batchShape : [null, ...this._frameStackShape]})
+            this._frameInputR = tf.input({batchShape : [null, ...this._frameStackShape]})
+
             this._telemetryInput = tf.input({batchShape : [null, this._nTelemetry]})
             
             this.actor = await this._getActor(this._prefix + NAME.ACTOR, this.trainable)
@@ -435,10 +488,12 @@ const AgentSac = (() => {
             // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
-                let convOutput = this._getConvEncoder(this._frameInput)
-                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                let convOutputL = this._getConvEncoder(this._frameInputL)
+                let convOutputR = this._getConvEncoder(this._frameInputR)
+                // let convOutput = tf.layers.concatenate().apply([convOutputL, convOutputR])
+                // convOutput = tf.layers.dense({units: 10, activation: 'relu'}).apply(convOutput)
 
-                outputs = tf.layers.concatenate().apply([convOutput, outputs])
+                outputs = tf.layers.concatenate().apply([convOutputL, convOutputR, outputs])
             }
 
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
@@ -447,7 +502,7 @@ const AgentSac = (() => {
             const mu     = tf.layers.dense({units: this._nActions}).apply(outputs)
             const logStd = tf.layers.dense({units: this._nActions}).apply(outputs)
 
-            const model = tf.model({inputs: this._sighted ? [this._telemetryInput, this._frameInput] : [this._telemetryInput], outputs: [mu, logStd], name})
+            const model = tf.model({inputs: this._sighted ? [this._telemetryInput, this._frameInputL, this._frameInputR] : [this._telemetryInput], outputs: [mu, logStd], name})
             model.trainable = trainable
 
             if (this._verbose) {
@@ -476,10 +531,12 @@ const AgentSac = (() => {
             // outputs = tf.layers.dense({units: 128, activation: 'relu'}).apply(outputs)
 
             if (this._sighted) {
-                let convOutput = this._getConvEncoder(this._frameInput)
-                // convOutput = tf.layers.dense({units: 256, activation: 'relu'}).apply(convOutput)
+                let convOutputL = this._getConvEncoder(this._frameInputL)
+                let convOutputR = this._getConvEncoder(this._frameInputR)
+                // let convOutput = tf.layers.concatenate().apply([convOutputL, convOutputR])
+                // convOutput = tf.layers.dense({units: 10, activation: 'relu'}).apply(convOutput)
 
-                outputs = tf.layers.concatenate().apply([convOutput, outputs])
+                outputs = tf.layers.concatenate().apply([convOutputL, convOutputR, outputs])
             }
 
             outputs = tf.layers.dense({units: 256, activation: 'relu'}).apply(outputs)
@@ -489,7 +546,7 @@ const AgentSac = (() => {
 
             const model = tf.model({
                 inputs: this._sighted 
-                    ? [this._telemetryInput, this._frameInput,  this._actionInput] 
+                    ? [this._telemetryInput, this._frameInputL, this._frameInputR, this._actionInput] 
                     : [this._telemetryInput, this._actionInput],
                 outputs, name
             })
@@ -544,26 +601,12 @@ const AgentSac = (() => {
                 activation: 'relu',
                 trainable: true
             }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-            
+            outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs)
+            // 
             // outputs = tf.layers.layerNormalization().apply(outputs)
 
             outputs = tf.layers.conv2d({
                 filters: 16,
-                kernelSize: 4,
-                strides: 2,
-                padding,
-                kernelInitializer,
-                biasInitializer,
-                activation: 'relu',
-                trainable: true
-            }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-
-            // outputs = tf.layers.layerNormalization().apply(outputs)
-            
-            outputs = tf.layers.conv2d({
-                filters: 8,
                 kernelSize: 3,
                 strides: 1,
                 padding,
@@ -572,8 +615,32 @@ const AgentSac = (() => {
                 activation: 'relu',
                 trainable: true
             }).apply(outputs)
-            // outputs = tf.layers.maxPooling2d({poolSize}).apply(outputs)
-          
+            outputs = tf.layers.maxPooling2d({poolSize:2}).apply(outputs)
+
+            // outputs = tf.layers.layerNormalization().apply(outputs)
+            
+            // outputs = tf.layers.conv2d({
+            //     filters: 12,
+            //     kernelSize: 3,
+            //     strides: 1,
+            //     padding,
+            //     kernelInitializer,
+            //     biasInitializer,
+            //     activation: 'relu',
+            //     trainable: true
+            // }).apply(outputs)
+
+            // outputs = tf.layers.conv2d({
+            //     filters: 10,
+            //     kernelSize: 2,
+            //     strides: 1,
+            //     padding,
+            //     kernelInitializer,
+            //     biasInitializer,
+            //     activation: 'relu',
+            //     trainable: true
+            // }).apply(outputs)
+
             // outputs = tf.layers.conv2d({
             //     filters: 64,
             //     kernelSize: 4,
@@ -674,7 +741,7 @@ const AgentSac = (() => {
          * @returns {tf.LayersModel} model
          */
         async _loadCheckpoint(name) {
-//    return
+// return
             if (this._forced) {
                 console.log('Forced to not load from the checkpoint ' + name)
                 return

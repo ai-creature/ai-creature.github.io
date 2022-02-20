@@ -43,7 +43,7 @@
             #testCanvas0 {
                 position:absolute;
                 width: 128px;
-                height: 64px;
+                height: 128px;
                 right:600px;
                 bottom: 0;
             }
@@ -51,7 +51,7 @@
             #testCanvas1 {
                 position:absolute;
                 width: 128px;
-                height: 64px;
+                height: 128px;
                 right:450px;
                 bottom: 0;
             }
@@ -59,7 +59,7 @@
             #testCanvas2 {
                 position:absolute;
                 width: 128px;
-                height: 64px;
+                height: 128px;
                 right: 300px;
                 bottom: 0;
             }
@@ -67,7 +67,7 @@
             #testCanvas3 {
                 position: absolute;
                 width: 128px;
-                height: 64px;
+                height: 128px;
                 right: 150px;
                 bottom: 0;
             }
@@ -75,7 +75,7 @@
             #testCanvas4 {
                 position: absolute;
                 width: 128px;
-                height: 64px;
+                height: 128px;
                 right: 0px;
                 bottom: 0;
             }
@@ -166,6 +166,7 @@
 
             window.transitions = []
             window.globalReward = 0
+            const BINOCULAR = true
 
             const createScene = async () => {
                 await agent.init()
@@ -246,7 +247,7 @@
                 creature.material = crMat
 
                 creature.impostor = new BABYLON.PhysicsImpostor(creature, BABYLON.PhysicsImpostor.SphereImpostor, {
-                    mass: 2,
+                    mass: 1,
                     friction: 0,
                     stiffness: 0,
                     restitution: 0
@@ -263,20 +264,39 @@
                 /* CREATURE's CAMERA */
                 const crCameraLeft = new BABYLON.UniversalCamera("cr_camera_l", new BABYLON.Vector3(0, 0, 0), scene)
                 crCameraLeft.parent = creature
-                crCameraLeft.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
-                crCameraLeft.fov = 2.4
-                // crCameraLeft.fovMode = BABYLON.Camera.PERSPECTIVE_CAMERA;
-
-                crCameraLeft.setTarget(new BABYLON.Vector3(-1, 0, 0.5))
-                // crCameraLeft.rotation = new BABYLON.Vector3(0, -(Math.PI - 0.3), 0)
+                crCameraLeft.position = new BABYLON.Vector3(-0.5, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                crCameraLeft.fov = 2
+                crCameraLeft.setTarget(new BABYLON.Vector3(-1, 0, 0.6))
 
                 const crCameraRight = new BABYLON.UniversalCamera("cr_camera_r", new BABYLON.Vector3(0, 0, 0), scene)
                 crCameraRight.parent = creature
-                crCameraRight.position = new BABYLON.Vector3(0, 0, 0)//new BABYLON.Vector3(0, 5, -10)
-                crCameraRight.fov = 2.4
-                // crCameraRight.fovMode = BABYLON.Camera.FOVMODE_HORIZONTAL_FIXED;
-                crCameraRight.setTarget(new BABYLON.Vector3(1, 0, 0.5))
+                crCameraRight.position = new BABYLON.Vector3(0.5, 0, 0)//new BABYLON.Vector3(0, 5, -10)
+                crCameraRight.fov = 2
+                crCameraRight.setTarget(new BABYLON.Vector3(1, 0, 0.6))
+
+
+
+                const crCameraLeftPl = BABYLON.MeshBuilder.CreateSphere("crCameraLeftPl", {diameter: 0.1, segments: 32}, scene);
+                crCameraLeftPl.parent = creature
+                crCameraLeftPl.position = new BABYLON.Vector3(-0.5, 0, 0)
+                const crCameraLeftPlclMat = new BABYLON.StandardMaterial("crCameraLeftPlclMat", scene)
+                crCameraLeftPlclMat.alpha = 0.3 // for screenshots
+                crCameraLeftPlclMat.diffuseColor = new BABYLON.Color3(0, 0, 0)
+                crCameraLeftPl.material = crCameraLeftPlclMat
+
+                const crCameraRightPl = BABYLON.MeshBuilder.CreateSphere("crCameraRightPl", {diameter: 0.1, segments: 32}, scene);
+                crCameraRightPl.parent = creature
+                crCameraRightPl.position = new BABYLON.Vector3(0.5, 0, 0)
+                const crCameraRightPlclMat = new BABYLON.StandardMaterial("crCameraRightPlclMat", scene)
+                crCameraRightPlclMat.alpha = 0.3 // for screenshots
+                crCameraRightPlclMat.diffuseColor = new BABYLON.Color3(0, 0, 0)
+                crCameraRightPl.material = crCameraRightPlclMat
+
+                
+                // crCameraLeft.rotation = new BABYLON.Vector3(0, -(Math.PI - 0.3), 0)
+                // crCameraLeft.fovMode = BABYLON.Camera.PERSPECTIVE_CAMERA;
                 // crCameraRight.rotation = new BABYLON.Vector3(0, +(Math.PI - 0.3), 0)
+                // crCameraRight.fovMode = BABYLON.Camera.FOVMODE_HORIZONTAL_FIXED;
 
                 // crCameraRight.checkCollisions = true;
                 // crCamera.rotation = (new BABYLON.Vector3(0.5, 0, 0))
@@ -299,7 +319,7 @@
                 const client = BABYLON.MeshBuilder.CreateSphere("client", {diameter: 3, segments: 32}, scene);
                 client.parent = camera
                 client.setParent(camera)
-                client.position = new BABYLON.Vector3(0, -12,0)
+                // client.position = new BABYLON.Vector3(0, -12,0)
 
                 const clMat = new BABYLON.StandardMaterial("cl_mat", scene)
                 clMat.diffuseColor = new BABYLON.Color3(0, 0, 0)
@@ -308,11 +328,16 @@
                 engine.hideLoadingUI();
 
                 /* CAGE */
-                const cage = BABYLON.MeshBuilder.CreateBox("cage", {
-                    width: 35, 
-                    depth: 35, 
-                    height: 40
+                const cage = BABYLON.MeshBuilder.CreateSphere("cage", {
+                    segements: 64, 
+                    diameter: 50
                 }, scene)
+
+                // const cage = BABYLON.MeshBuilder.CreateBox("cage", {
+                //     width: 100, 
+                //     depth: 100, 
+                //     height: 40
+                // }, scene)
                 cage.parent = null
                 cage.setParent(null)
                 cage.position = new BABYLON.Vector3(0, -12,0)
@@ -354,7 +379,7 @@
                     ball.setParent(null)
                     ball.isPickable = true
                     ball.impostor = new BABYLON.PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, {
-                        mass: 100,
+                        mass: 7,
                         friction: 1,
                         stiffness: 1,
                         restitution: 1
@@ -482,45 +507,81 @@
                     console.log('numTensors AFTER: ' + tf.memory().numTensors)
                     */
 
-                    const base64Data = await Promise.all([
-                        BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
-                            height: agent._frameShape[0],
-                            width: agent._frameShape[1]
-                        }),
-                        BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, { // ~ 7-60ms
-                            height: agent._frameShape[0],
-                            width: agent._frameShape[1]
-                        })
-                    ])
 
-                    /* Creature's POV */
-                    // ;(() => {
-                    //     const img = new Image()
-                    //     img.onload = () => document.getElementById('testCanvas3')
-                    //         .getContext('2d')
-                    //         .drawImage(img, 0, 0, 256, 128)
-                    //     img.src = base64Data
-                    // })()
 
-                    frameStack.push(...base64Data)
 
-                    if (frameStack.length >= agent._nFrames) { // ~20ms
+
+
+
+                    // const screenShots = []
+                    // screenShots.push(
+                    //     BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
+                    //         height: agent._frameShape[0],
+                    //         width: agent._frameShape[1]
+                    //     })
+                    // )
+                    // screenShots.push(
+                    //     BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, { // ~ 7-60ms
+                    //         height: agent._frameShape[0],
+                    //         width: agent._frameShape[1]
+                    //     })
+                    // )
+                    // const base64Data = await Promise.all(screenShots)
+                    // frameStack.push(base64Data)
+
+
+
+
+                    //delay
+                    if (!frameStack.length) {
+                        frameStack.push([
+                            await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraLeft, { // ~ 7-60ms
+                                height: agent._frameShape[0],
+                                width: agent._frameShape[1]
+                            })
+                        ])
+                    } else {
+                        frameStack[0].push(
+                            await BABYLON.Tools.CreateScreenshotUsingRenderTargetAsync(engine, crCameraRight, { // ~ 7-60ms
+                                height: agent._frameShape[0],
+                                width: agent._frameShape[1]
+                            })
+                        )
+                    }
+
+
+
+
+                    if (frameStack.length >= agent._nFrames && frameStack[0].length == 2) { // ~20ms
                         if (frameStack.length > agent._nFrames)
                             throw new Error("(⊙＿⊙')")
 
-                        const imgs = await Promise.all(frameStack.map(base64Data => base64ToImg(base64Data)))
-                        // tf.browser.toPixels(tensors[0], document.getElementById("testCanvas")) // timer ~1ms
+                        const imgs = await Promise.all(frameStack.flat().map(fr => base64ToImg(fr)))
 
                         const framesNorm = tf.tidy(() => {
                             const greyScaler = tf.tensor([0.299, 0.587, 0.114], [1, 1, 3])
                             let imgTensors = imgs.map(img => tf.browser.fromPixels(img)
-                                
-                                // .mul(greyScaler).sum(-1, true)
+                                //.mul(greyScaler).sum(-1, true)
                             )
+
+                            // optic chiasma
+                            // imgTensors = imgTensors.map(img => tf.split(img, 2, 1))
+                            // for (let i = 0; i < imgTensors.length; i = i + 2) {
+                            //     const first = tf.concat([imgTensors[i][0], imgTensors[i+1][0]], -1)
+                            //     const second = tf.concat([imgTensors[i][1], imgTensors[i+1][1]], -1)
+                            //     imgTensors[i] = first
+                            //     imgTensors[i+1] = second
+                            // }
                             
+                            // imgTensors = [
+                            //     imgTensors[0].concat(imgTensors[1], 1), 
+                            //     //imgTensors[2].concat(imgTensors[3], 1)
+                            // ]
+
+
                             // if (collisionMesh) {
                                 imgTensors = imgTensors.map((t, i) => {
-                                    const canv = document.getElementById('testCanvas' + (i + 3))
+                                    const canv = document.getElementById('testCanvas' + (i+3))
                                     if (canv) {
                                         tf.browser.toPixels(t, canv) // timer ~1ms
                                     }
@@ -530,7 +591,11 @@
                                 })
                             // }
 
-                            const res = tf.concat(imgTensors, -1)
+                            const resL = tf.concat(imgTensors.filter((el, i) => i%2==0), -1)
+                            const resR = tf.concat(imgTensors.filter((el, i) => i%2==1), -1)
+                            return [resL, resR]
+
+                            // return [tf.concat(imgTensors, -1)]
 
                             // let frTest = tf.unstack(res, -1)
                             //     // frTest = [tf.concat(frTest.slice(0,3), -1), tf.concat(frTest.slice(3), -1)]
@@ -538,9 +603,8 @@
                             
                             // console.log(tf.concat(tf.unstack(tf.concat(imgTensors, 2), -1), -1).arraySync()[30][0][0])
 
-                            return res
                         })
-                        const framesBatch = tf.stack([framesNorm])
+                        const framesBatch = framesNorm.map(fr => tf.stack([fr]))
 
                         const delta = (Date.now() - timer) / 1000 // sec
                         console.log('delta (s)', delta)
@@ -573,29 +637,6 @@
                         ]
                         const reward = window.reward
 
-                        // let reward = 0
-                        // if (collision.x || collision.y || collision.z) {
-                        //     // rewardCombo = 0
-                        //     reward = -1
-                        //     if (collisionMesh) {
-                        //         if (collisionMesh.startsWith('ball_')) reward = 10
-                        //         // if (collisionMesh.endsWith('_red'))  reward = -100
-                        //     }
-                        // } 
-                        // // else {
-                        // //     rewardCombo++
-                        // //     if (rewardCombo > maxCombo) {
-                        // //         maxCombo = rewardCombo
-                        // //         console.log('reward COMBO!!! ', maxCombo)
-                        // //     }
-                        // //     reward = 0
-                        // // }
-                        // // reward += window.vote
-                        // window.vote = 0
-                        // globalReward += reward
-                        
-                        // console.log('reward: ', reward, globalReward, collisionMesh)
-
                         //collisionMesh &&  
                         // if (collisionMesh && transitions.length) {
                         //     tf.tidy(() => {
@@ -613,17 +654,16 @@
                         window.reward = -0.01
                         window.onCollide = undefined
                         const telemetryBatch = tf.tensor(telemetry, [1, agent._nTelemetry])
-                        const action = agent.sampleAction([telemetryBatch, framesBatch]) // timer ~5ms
-
+                        const action = agent.sampleAction([telemetryBatch, ...framesBatch]) // timer ~5ms
 
 
                         // TODO: !!!!!await find the way to avoid framesNorm.array()
                         console.time('await')
-                        const [framesArr, [actionArr]] = await Promise.all([framesNorm.array(), action.array()]) // action come as a batch of size 1
+                        const [framesArrL, framesArrR,[actionArr]] = await Promise.all([...(framesNorm.map(fr => fr.array())), action.array()]) // action come as a batch of size 1
                         console.timeEnd('await')
                         // DEBUG Conv encoder
                         tf.tidy(() => { // timer ~2.5ms
-                            const testOutput = spy.predict([telemetryBatch, framesBatch], {batchSize: 1})
+                            const testOutput = spy.predict([telemetryBatch, ...framesBatch], {batchSize: 1})
                             console.log('spy', testLayer.name, testOutput.arraySync())
 
                             return
@@ -645,13 +685,13 @@
                         })
 
                         const 
-                            impulse = actionArr.slice(0, 3)//, //.map(el => el*2)//, // [0,-1, 0], //    
+                            impulse = actionArr.slice(0, 3)//.map(el => el/10)//, // [0,-1, 0], //    
                             // rotation = actionArr.slice(3, 7).map(el => el),
                             // color = actionArr.slice(3, 6).map(el => el)/.map(el => el) // [-1,1] => [0,2] => [0, 255]
                             // look = actionArr.slice(3, 6)
 
-console.log('tel tel: ', telemetry.map(t=> t.toFixed(3)))
-console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
+                        // console.log('tel tel: ', telemetry.map(t=> t.toFixed(3)))
+                        // console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
                         console.assert(actionArr.length === 3, actionArr.length)
                         console.assert(impulse.length === 3)
@@ -662,20 +702,20 @@ console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
                         // [0,-1,0]
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero()) // just in case, probably redundant
                         // creature.impostor.setLinearVelocity(BABYLON.Vector3.Zero()) // contact point zero
-                        creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
+creature.impostor.applyImpulse(new BABYLON.Vector3(...impulse), creature.getAbsolutePosition()) // contact point zero
                         creature.impostor.setAngularVelocity(BABYLON.Quaternion.Zero())
                         // creature.glow.color2 = new BABYLON.Color4(...color)
                         
                         // after applyImpulse the linear velocity is recalculated right away
                         const newLinearVelocity = creature.impostor.getLinearVelocity().normalize() 
                         // creature.lookAt(new BABYLON.Vector3(0, -1, 0), 0, 0, 0, BABYLON.Space.LOCAL)
-                        creature.lookAt(creature.position.add(newLinearVelocity))
+creature.lookAt(creature.position.add(newLinearVelocity))
                         //if (!window.rr) window.rr = 
                         // creature.lookAt(creature.position.add(new BABYLON.Vector3(0,1,0)))
 
                         const transtion = {
                             id: stateId++, 
-                            state: [telemetry, framesArr], // 20ms vs 50ms || size 200kb vs 1.5mb
+                            state: [telemetry, framesArrL, framesArrR], // 20ms vs 50ms || size 200kb vs 1.5mb
                             action: actionArr,
                             reward
                         }
@@ -683,7 +723,7 @@ console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
                         window.onCollide = (collision, mesh) => {
                             window.collision = collision
-                            window.reward += -0.01
+                            window.reward += -0.05
 
                             if (mesh.startsWith('ball_')) {
                                 console.log('reward', mesh)
@@ -702,9 +742,9 @@ console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
                             const transition = transitions.shift()
 
-                            // if (transition.reward > 1) {
-                                // transition.priority = 7
-                                // console.log('reward prio:', transition, transition.state[0])
+                            // if (transition.reward > 0) {
+                            //     transition.priority = 7
+                            //     console.log('reward prio:', transition, transition.state[0])
                             // }
                             window.globalReward += transition.reward
                             console.log('reward', transition.reward, window.globalReward)
@@ -716,8 +756,8 @@ console.log('tel imp:', impulse.map(t=> t.toFixed(3)))
 
                         // imgTensors.forEach(t => t.dispose())
                         // frames.dispose()
-                        framesNorm.dispose()
-                        framesBatch.dispose()
+                        framesNorm.map(fr => fr.dispose())
+                        framesBatch.map(fr => fr.dispose())
                         telemetryBatch.dispose()
                         action.dispose()
 

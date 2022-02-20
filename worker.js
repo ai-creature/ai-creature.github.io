@@ -11,8 +11,9 @@ importScripts('reply_buffer.js')
     agent.actor.summary()
     self.postMessage({weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))}) // syncronize
 
-    const rb = new ReplyBuffer(100000, ({ state: [telemetry, frame], action, reward }) => {
-        frame.dispose()
+    const rb = new ReplyBuffer(50000, ({ state: [telemetry, frameL, frameR], action, reward }) => {
+        frameL.dispose()
+        frameR.dispose()
         telemetry.dispose()
         action.dispose()
         reward.dispose()
@@ -24,6 +25,7 @@ importScripts('reply_buffer.js')
      * @returns delay in ms to get ready for the next job
      */
     const job = async () => {
+// throw 'disabled'
         if (DISABLED) return 99999
         if (rb.size < agent._batchSize*10) return 1000
         
@@ -31,38 +33,42 @@ importScripts('reply_buffer.js')
         if (!samples.length) return 1000
     
         const 
-            frames = [],
+            framesL = [],
+            framesR = [],
             telemetries = [],
             actions = [],
             rewards = [],
-            nextFrames = [],
+            nextFramesL = [],
+            nextFramesR = [],
             nextTelemetries = []
     
         for (const {
-            state: [telemetry, frame], 
+            state: [telemetry, frameL, frameR], 
             action, 
             reward, 
-            nextState: [nextTelemetry, nextFrame] 
+            nextState: [nextTelemetry, nextFrameL, nextFrameR] 
         } of samples) {
-            frames.push(frame)
+            framesL.push(frameL)
+            framesR.push(frameR)
             telemetries.push(telemetry)
             actions.push(action)
             rewards.push(reward)
-            nextFrames.push(nextFrame)
+            nextFramesL.push(nextFrameL)
+            nextFramesR.push(nextFrameR)
             nextTelemetries.push(nextTelemetry)
         }
     
        tf.tidy(() => {
-            const state = [tf.stack(telemetries), tf.stack(frames)]
             console.time('train')
             agent.train({
-                state, 
-                action: tf.stack(actions), 
-                reward: tf.stack(rewards), 
-                nextState: [tf.stack(nextTelemetries), tf.stack(nextFrames)]
+                state:     [tf.stack(telemetries), tf.stack(framesL), tf.stack(framesR)],
+                action:     tf.stack(actions), 
+                reward:     tf.stack(rewards), 
+                nextState: [tf.stack(nextTelemetries), tf.stack(nextFramesL), tf.stack(nextFramesR)]
             })
             console.timeEnd('train')
         })
+
         console.time('train postMessage')
         self.postMessage({
             weights: await Promise.all(agent.actor.getWeights().map(w => w.array()))
@@ -93,12 +99,13 @@ importScripts('reply_buffer.js')
      * @returns 
      */
     const decodeTransition = transition => {
-        let { id, state: [telemetry, frames], action, reward, priority } = transition
+        let { id, state: [telemetry, frameL, frameR], action, reward, priority } = transition
     
         return tf.tidy(() => {
             state = [
                 tf.tensor1d(telemetry),
-                tf.tensor3d(frames, agent._frameStackShape)
+                tf.tensor3d(frameL, agent._frameStackShape),
+                tf.tensor3d(frameR, agent._frameStackShape)
             ]
             action = tf.tensor1d(action)
             reward = tf.tensor1d([reward])
@@ -120,12 +127,12 @@ importScripts('reply_buffer.js')
                 rb.add(transition)
 
                 tf.tidy(()=> {
-                    // return
+                    return
                     const {
-                        state: [telemetry, frame], 
+                        state: [telemetry, frameL, frameR], 
                         action,
                     } = transition;
-                    const state = [tf.stack([telemetry]), tf.stack([frame])]
+                    const state = [tf.stack([telemetry]), tf.stack([frameL]), tf.stack([frameR])]
                     const q1TargValue = agent.q1Targ.predict([...state, tf.stack([action])], {batchSize: 1})
                     const q2TargValue = agent.q2Targ.predict([...state, tf.stack([action])], {batchSize: 1})                    
                     console.log('value', Math.min(q1TargValue.arraySync()[0][0], q2TargValue.arraySync()[0][0]).toFixed(5))
